@@ -11,6 +11,22 @@ const isMockMode = () => {
   return import.meta.env.VITE_MOCK_MODE === 'true';
 };
 
+const normalizeWaypoint = (waypoint, index) => {
+  const altValue = Number(waypoint?.alt ?? waypoint?.altitude ?? 100);
+  return {
+    ...waypoint,
+    id: waypoint?.id || crypto.randomUUID(),
+    seq: Number.isFinite(Number(waypoint?.seq)) ? Number(waypoint.seq) : index,
+    lat: Number(waypoint?.lat) || 0,
+    lng: Number(waypoint?.lng) || 0,
+    alt: Number.isFinite(altValue) ? altValue : 100,
+    altitude_mode: waypoint?.altitude_mode || waypoint?.altMode || 'relative',
+    command: waypoint?.command || 'NAV_WAYPOINT',
+  };
+};
+
+const normalizeWaypoints = (waypoints = []) => waypoints.map((wp, i) => normalizeWaypoint(wp, i));
+
 export const useMissionStore = create((set, get) => ({
   missions: [],
   selectedMissionId: null,
@@ -36,13 +52,13 @@ export const useMissionStore = create((set, get) => ({
   fetchMission: async (id) => {
     if (isMockMode()) {
       const mission = get().missions.find((m) => m.id === id) || null;
-      set({ activeMission: mission, waypoints: mission?.waypoints || [], isLoading: false, error: null });
+      set({ activeMission: mission, waypoints: normalizeWaypoints(mission?.waypoints || []), isLoading: false, error: null });
       return mission;
     }
     set({ isLoading: true, error: null });
     try {
       const { data } = await missionAPI.get(id);
-      set({ activeMission: data, waypoints: data.waypoints || [], isLoading: false });
+      set({ activeMission: data, waypoints: normalizeWaypoints(data.waypoints || []), isLoading: false });
       return data;
     } catch (err) {
       set({ error: err.message, isLoading: false });
@@ -119,9 +135,13 @@ export const useMissionStore = create((set, get) => ({
   },
 
   createMission: async (missionData) => {
+    const normalizedPayload = {
+      ...missionData,
+      waypoints: normalizeWaypoints(missionData?.waypoints || []),
+    };
     if (isMockMode()) {
       const mockMission = {
-        ...missionData,
+        ...normalizedPayload,
         id: crypto.randomUUID(),
         status: missionData.status || 'planned',
         progress: 0,
@@ -132,7 +152,7 @@ export const useMissionStore = create((set, get) => ({
     }
     set({ isLoading: true, error: null });
     try {
-      const { data } = await missionAPI.create(missionData);
+      const { data } = await missionAPI.create(normalizedPayload);
       set((state) => ({ missions: [...state.missions, data], isLoading: false }));
       return data;
     } catch (err) {
@@ -142,10 +162,13 @@ export const useMissionStore = create((set, get) => ({
   },
 
   updateMission: async (missionId, updates) => {
+    const normalizedUpdates = updates?.waypoints
+      ? { ...updates, waypoints: normalizeWaypoints(updates.waypoints) }
+      : updates;
     if (isMockMode()) {
       set((state) => ({
-        missions: state.missions.map((m) => (m.id === missionId ? { ...m, ...updates } : m)),
-        activeMission: state.activeMission?.id === missionId ? { ...state.activeMission, ...updates } : state.activeMission,
+        missions: state.missions.map((m) => (m.id === missionId ? { ...m, ...normalizedUpdates } : m)),
+        activeMission: state.activeMission?.id === missionId ? { ...state.activeMission, ...normalizedUpdates } : state.activeMission,
         isLoading: false,
         error: null,
       }));
@@ -153,7 +176,7 @@ export const useMissionStore = create((set, get) => ({
     }
     set({ isLoading: true, error: null });
     try {
-      const { data } = await missionAPI.update(missionId, updates);
+      const { data } = await missionAPI.update(missionId, normalizedUpdates);
       set((state) => ({
         missions: state.missions.map((m) => (m.id === missionId ? data : m)),
         activeMission: state.activeMission?.id === missionId ? data : state.activeMission,
@@ -194,7 +217,7 @@ export const useMissionStore = create((set, get) => ({
 
   addWaypoint: (waypoint) => {
     set((state) => ({
-      waypoints: [...state.waypoints, { ...waypoint, seq: state.waypoints.length, id: crypto.randomUUID() }],
+      waypoints: [...state.waypoints, normalizeWaypoint({ ...waypoint, seq: state.waypoints.length }, state.waypoints.length)],
     }));
   },
 

@@ -19,8 +19,25 @@ function createDroneIcon(status, heading = 0) {
   return L.divIcon({
     className: 'custom-drone-icon',
     html: `<div style="transform:rotate(${heading}deg);width:32px;height:32px;display:flex;align-items:center;justify-content:center;">
-      <svg width="28" height="28" viewBox="0 0 24 24" fill="${color}" stroke="#fff" stroke-width="1">
-        <path d="M12 2L4 12l8 10 8-10z"/>
+      <svg width="32" height="32" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+        <!-- Arms -->
+        <line x1="32" y1="32" x2="14" y2="14" stroke="rgba(255,255,255,0.95)" stroke-width="3" stroke-linecap="round" />
+        <line x1="32" y1="32" x2="50" y2="14" stroke="rgba(255,255,255,0.95)" stroke-width="3" stroke-linecap="round" />
+        <line x1="32" y1="32" x2="14" y2="50" stroke="rgba(255,255,255,0.95)" stroke-width="3" stroke-linecap="round" />
+        <line x1="32" y1="32" x2="50" y2="50" stroke="rgba(255,255,255,0.95)" stroke-width="3" stroke-linecap="round" />
+
+        <!-- Rotors -->
+        <circle cx="14" cy="14" r="7" fill="${color}" stroke="rgba(255,255,255,0.95)" stroke-width="2" />
+        <circle cx="50" cy="14" r="7" fill="${color}" stroke="rgba(255,255,255,0.95)" stroke-width="2" />
+        <circle cx="14" cy="50" r="7" fill="${color}" stroke="rgba(255,255,255,0.95)" stroke-width="2" />
+        <circle cx="50" cy="50" r="7" fill="${color}" stroke="rgba(255,255,255,0.95)" stroke-width="2" />
+
+        <!-- Body -->
+        <circle cx="32" cy="32" r="9" fill="${color}" stroke="rgba(15,23,42,0.9)" stroke-width="4" />
+        <circle cx="32" cy="32" r="9" fill="none" stroke="rgba(255,255,255,0.95)" stroke-width="2" />
+
+        <!-- Heading nose -->
+        <path d="M32 18 L27 28 L37 28 Z" fill="rgba(255,255,255,0.95)" />
       </svg>
     </div>`,
     iconSize: [32, 32],

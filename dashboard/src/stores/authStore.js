@@ -76,6 +76,13 @@ export const useAuthStore = create(
     {
       name: 'aero-auth-store',
       partialize: (state) => ({ user: state.user, isAuthenticated: state.isAuthenticated }),
+      merge: (persistedState, currentState) => {
+        // If tokens are missing, ignore any persisted "authenticated" flag.
+        // This avoids redirect loops when a previous session was persisted but JWTs were cleared/expired.
+        const token = localStorage.getItem(TOKEN_KEY);
+        if (!token) return currentState;
+        return { ...currentState, ...(persistedState || {}) };
+      },
     }
   )
 );

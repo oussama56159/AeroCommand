@@ -11,6 +11,7 @@ import DashboardPage from '@/pages/dashboard/DashboardPage';
 import FleetPage from '@/pages/fleet/FleetPage';
 import VehicleDetailPage from '@/pages/fleet/VehicleDetailPage';
 import TelemetryPage from '@/pages/telemetry/TelemetryPage';
+import CameraPage from '@/pages/camera/CameraPage';
 import LiveMapPage from '@/pages/map/LiveMapPage';
 import MissionPlannerPage from '@/pages/missions/MissionPlannerPage';
 import ControlPanelPage from '@/pages/control/ControlPanelPage';
@@ -72,6 +73,7 @@ export default function App() {
         <Route path="fleet" element={<FleetPage />} />
         <Route path="fleet/:id" element={<VehicleDetailPage />} />
         <Route path="telemetry" element={<TelemetryPage />} />
+        <Route path="camera" element={<CameraPage />} />
         <Route path="map" element={<LiveMapPage />} />
         <Route path="missions" element={
           <ProtectedRoute requiredRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.PILOT, ROLES.OPERATOR]}>

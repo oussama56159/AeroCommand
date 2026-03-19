@@ -1,6 +1,29 @@
 import axios from 'axios';
 import { API_BASE_URL, TOKEN_KEY, REFRESH_TOKEN_KEY } from '@/config/constants';
 
+const AUTH_ROUTES = ['/login', '/register', '/password-recovery'];
+const AUTH_STORE_PERSIST_KEY = 'aero-auth-store';
+
+function isAuthRoutePath(pathname) {
+  if (!pathname) return false;
+  return AUTH_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+}
+
+function redirectToLoginIfNeeded() {
+  if (typeof window === 'undefined') return;
+  const pathname = window.location?.pathname;
+  if (isAuthRoutePath(pathname)) return;
+
+  // If auth persistence says we're logged in while tokens are gone/invalid,
+  // routing can bounce between public/protected pages and trigger repeated reloads.
+  try {
+    localStorage.removeItem(AUTH_STORE_PERSIST_KEY);
+  } catch {
+    // ignore
+  }
+  window.location.replace('/login');
+}
+
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 15000,
@@ -55,7 +78,7 @@ apiClient.interceptors.response.use(
       if (!refreshToken) {
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(REFRESH_TOKEN_KEY);
-        window.location.href = '/login';
+        redirectToLoginIfNeeded();
         return Promise.reject(error);
       }
 
@@ -72,7 +95,7 @@ apiClient.interceptors.response.use(
         processQueue(refreshError, null);
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(REFRESH_TOKEN_KEY);
-        window.location.href = '/login';
+        redirectToLoginIfNeeded();
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

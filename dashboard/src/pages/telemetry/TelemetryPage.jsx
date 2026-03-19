@@ -117,15 +117,14 @@ export default function TelemetryPage() {
   const [selectedId, setSelectedId] = useState(vehicles.find((v) => v.status !== 'offline')?.id || vehicles[0]?.id);
 
   const t = allTelemetry[selectedId];
-  const history = t?.history || [];
+  const history = t?.history;
   const chartData = useMemo(() => {
-    const recent = history.slice(-60);
+    const recent = (history || []).slice(-60);
     return recent.map((h, i) => {
       const voltage = h.voltage ?? 0;
       const current = h.current ?? 0;
       return {
         time: i,
-        ts: h.timestamp ?? Date.now(),
         altitude: h.altitude ?? 0,
         speed: h.groundspeed ?? 0,
         battery: h.battery ?? 0,

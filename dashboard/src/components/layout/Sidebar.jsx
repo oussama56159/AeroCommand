@@ -3,6 +3,7 @@ import { clsx } from 'clsx';
 import {
   LayoutDashboard, Radar, Map, Navigation, Gamepad2, Bell,
   BarChart3, Users, Settings, ChevronLeft, ChevronRight, Shield, Radio,
+  Camera,
 } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
@@ -12,6 +13,7 @@ const navItems = [
   { path: '/app', icon: LayoutDashboard, label: 'Dashboard', roles: null },
   { path: '/app/fleet', icon: Radar, label: 'Fleet Management', roles: null },
   { path: '/app/telemetry', icon: Radio, label: 'Telemetry', roles: null },
+  { path: '/app/camera', icon: Camera, label: 'Camera', roles: null },
   { path: '/app/map', icon: Map, label: 'Live Map', roles: null },
   { path: '/app/missions', icon: Navigation, label: 'Mission Planner', roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.PILOT, ROLES.OPERATOR] },
   { path: '/app/control', icon: Gamepad2, label: 'Control Panel', roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.PILOT] },
