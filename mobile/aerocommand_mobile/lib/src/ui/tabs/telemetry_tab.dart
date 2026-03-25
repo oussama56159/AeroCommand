@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../api/api_client.dart';
 import '../../models/vehicle_model.dart';
+import '../../mock/demo_repository.dart';
 import '../../realtime/realtime_controller.dart';
 import '../../realtime/telemetry_summary.dart';
 import '../screens/fullscreen_chart_screen.dart';
@@ -36,6 +37,18 @@ class _TelemetryTabState extends State<TelemetryTab> {
   Future<void> _loadVehicles() async {
     setState(() => _loadingVehicles = true);
     try {
+      final realtime = context.read<RealtimeController>();
+      if (realtime.isDemo) {
+        final repo = DemoRepository.instance;
+        repo.ensureInitialized();
+        final items = repo.listVehicles().map((e) => VehicleModel.fromJson(e)).toList();
+        setState(() {
+          _vehicles = items;
+          _selectedVehicleId ??= items.isNotEmpty ? items.first.id : null;
+        });
+        return;
+      }
+
       final api = context.read<ApiClient>();
       final res = await api.getJson('/fleet/vehicles', query: {'page': '1', 'page_size': '200'});
       if (res is Map && res['items'] is List) {

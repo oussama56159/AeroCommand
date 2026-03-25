@@ -153,12 +153,18 @@ export const useFleetStore = create((set, get) => ({
 
   deleteFleet: async (fleetId) => {
     if (isMockMode()) {
-      set((state) => ({ fleets: state.fleets.filter((f) => f.id !== fleetId) }));
+      set((state) => ({
+        fleets: state.fleets.filter((f) => f.id !== fleetId),
+        vehicles: state.vehicles.map((v) => (v.fleet_id === fleetId ? { ...v, fleet_id: null } : v)),
+      }));
       return;
     }
     try {
       await fleetAPI.delete(fleetId);
-      set((state) => ({ fleets: state.fleets.filter((f) => f.id !== fleetId) }));
+      set((state) => ({
+        fleets: state.fleets.filter((f) => f.id !== fleetId),
+        vehicles: state.vehicles.map((v) => (v.fleet_id === fleetId ? { ...v, fleet_id: null } : v)),
+      }));
     } catch (err) {
       set({ error: err.message });
       throw err;
@@ -167,8 +173,22 @@ export const useFleetStore = create((set, get) => ({
 
   createVehicle: async (vehicleData) => {
     if (isMockMode()) {
+      const providedSerial = (vehicleData.serial_number || '').trim();
+      let serial_number = providedSerial || null;
+      if (!serial_number) {
+        const re = /^SN-(\d+)$/;
+        const maxSuffix = (get().vehicles || []).reduce((acc, v) => {
+          const s = (v?.serial_number || '').trim();
+          const m = re.exec(s);
+          if (!m) return acc;
+          const n = Number(m[1]);
+          return Number.isFinite(n) ? Math.max(acc, n) : acc;
+        }, 0);
+        serial_number = `SN-${String(maxSuffix + 1).padStart(3, '0')}`;
+      }
       const mockVehicle = {
         ...vehicleData,
+        serial_number,
         id: crypto.randomUUID(),
         status: vehicleData.status || 'offline',
         created_at: new Date().toISOString(),

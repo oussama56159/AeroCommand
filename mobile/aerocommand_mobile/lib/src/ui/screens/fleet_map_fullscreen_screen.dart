@@ -57,6 +57,7 @@ class _FleetMapFullscreenScreenState extends State<FleetMapFullscreenScreen> {
         _VehicleMarker(
           vehicleId: v.id,
           name: v.name,
+          vehicleType: v.type,
           state: state,
           headingDeg: t.heading,
           point: LatLng(t.lat, t.lng),
@@ -124,7 +125,7 @@ class _FleetMapFullscreenScreenState extends State<FleetMapFullscreenScreen> {
                   _userInteracted = true;
                 }
               },
-              onTap: (_, __) => setState(() => _selectedVehicleId = null),
+              onTap: (_, _) => setState(() => _selectedVehicleId = null),
             ),
             children: [
               TileLayer(
@@ -146,6 +147,7 @@ class _FleetMapFullscreenScreenState extends State<FleetMapFullscreenScreen> {
                           vm: DroneMarkerViewModel(
                             vehicleId: m.vehicleId,
                             name: m.name,
+                            vehicleType: m.vehicleType,
                             state: m.state,
                             headingDeg: m.headingDeg,
                             altMeters: m.altMeters,
@@ -239,6 +241,7 @@ class _VehicleMarker {
   _VehicleMarker({
     required this.vehicleId,
     required this.name,
+    required this.vehicleType,
     required this.state,
     required this.headingDeg,
     required this.point,
@@ -248,6 +251,7 @@ class _VehicleMarker {
 
   final String vehicleId;
   final String name;
+  final String vehicleType;
   final DroneOperationalState state;
   final double headingDeg;
   final LatLng point;

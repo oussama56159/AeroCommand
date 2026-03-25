@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../api/api_client.dart';
 import '../../models/vehicle_model.dart';
+import '../../mock/demo_repository.dart';
 import '../../realtime/realtime_controller.dart';
 import '../screens/drone_details_screen.dart';
 import '../screens/fullscreen_chart_screen.dart';
@@ -34,6 +35,15 @@ class _DashboardTabState extends State<DashboardTab> {
     });
 
     try {
+      final realtime = context.read<RealtimeController>();
+      if (realtime.isDemo) {
+        final repo = DemoRepository.instance;
+        repo.ensureInitialized();
+        final items = repo.listVehicles().map((e) => VehicleModel.fromJson(e)).toList();
+        setState(() => _vehicles = items);
+        return;
+      }
+
       final api = context.read<ApiClient>();
       final res = await api.getJson('/fleet/vehicles', query: {'page': '1', 'page_size': '200'});
       if (res is Map && res['items'] is List) {
@@ -68,6 +78,10 @@ class _DashboardTabState extends State<DashboardTab> {
 
     final vehicleNameById = <String, String>{
       for (final v in _vehicles) v.id: v.name,
+    };
+
+    final vehicleTypeById = <String, String>{
+      for (final v in _vehicles) v.id: v.type,
     };
 
     final batteryByName = <String, double>{};
@@ -212,7 +226,15 @@ class _DashboardTabState extends State<DashboardTab> {
                       children: [
                         for (final t in topRecent)
                           ListTile(
-                            leading: DroneLogo(size: 24, color: scheme.onSurface),
+                            leading: DroneLogo(
+                              size: 24,
+                              color: scheme.onSurface,
+                              rotorCount: vehicleTypeById[t.vehicleId] == 'hexacopter'
+                                  ? 6
+                                  : vehicleTypeById[t.vehicleId] == 'octocopter'
+                                      ? 8
+                                      : 4,
+                            ),
                             title: Text(
                               vehicleNameById[t.vehicleId] ?? t.vehicleId,
                               maxLines: 1,

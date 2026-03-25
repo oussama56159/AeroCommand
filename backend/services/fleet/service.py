@@ -1,10 +1,11 @@
 """Fleet & Vehicle business logic."""
 from __future__ import annotations
 
+import re
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import Integer, cast, delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.shared.schemas.auth import Role
@@ -24,10 +25,60 @@ from backend.shared.schemas.vehicle import (
 from backend.services.auth.models import User
 from .models import Fleet, FleetUserAssignment, Vehicle
 
+_SERIAL_RE = re.compile(r"^SN-(\d+)$")
+_SERIAL_PREFIX = "SN-"
+_SERIAL_PAD = 3
+
+# Global advisory lock key for serial-number generation.
+# Must fit in signed 64-bit integer.
+_SERIAL_ADVISORY_LOCK_KEY = 7348972349872
+
+
+async def _generate_next_vehicle_serial_number(db: AsyncSession) -> str:
+    """Generate the next sequential serial number (SN-001, SN-002, ...).
+
+    - Global sequence (not per org/fleet)
+    - Does not renumber on delete (gaps are fine)
+    - Uses a Postgres advisory transaction lock when running on Postgres
+    """
+
+    bind = db.get_bind()
+    if bind is not None and bind.dialect.name == "postgresql":
+        await db.execute(
+            text("SELECT pg_advisory_xact_lock(:key)"),
+            {"key": _SERIAL_ADVISORY_LOCK_KEY},
+        )
+
+        serial_digits = func.substring(Vehicle.serial_number, r"^SN-(\d+)$")
+        stmt = (
+            select(func.max(cast(serial_digits, Integer)))
+            .where(Vehicle.serial_number.is_not(None))
+            .where(Vehicle.serial_number.like(f"{_SERIAL_PREFIX}%"))
+        )
+        max_suffix = (await db.execute(stmt)).scalar()
+        next_num = int(max_suffix or 0) + 1
+        return f"{_SERIAL_PREFIX}{next_num:0{_SERIAL_PAD}d}"
+
+    # Portable fallback: parse existing serials in Python.
+    result = await db.execute(select(Vehicle.serial_number).where(Vehicle.serial_number.is_not(None)))
+    max_suffix = 0
+    for (serial,) in result.all():
+        if not serial:
+            continue
+        match = _SERIAL_RE.match(serial.strip())
+        if match:
+            max_suffix = max(max_suffix, int(match.group(1)))
+    next_num = max_suffix + 1
+    return f"{_SERIAL_PREFIX}{next_num:0{_SERIAL_PAD}d}"
+
 
 # ── Vehicle CRUD ──
 
 async def create_vehicle(db: AsyncSession, org_id: UUID, data: VehicleCreate) -> VehicleResponse:
+    serial = (data.serial_number or "").strip() or None
+    if serial is None:
+        serial = await _generate_next_vehicle_serial_number(db)
+
     vehicle = Vehicle(
         name=data.name,
         callsign=data.callsign,
@@ -35,7 +86,7 @@ async def create_vehicle(db: AsyncSession, org_id: UUID, data: VehicleCreate) ->
         fleet_id=data.fleet_id,
         organization_id=org_id,
         firmware=data.firmware,
-        serial_number=data.serial_number,
+        serial_number=serial,
         hardware_id=data.hardware_id,
         metadata_json=data.metadata,
     )
@@ -131,6 +182,18 @@ async def delete_vehicle(db: AsyncSession, org_id: UUID, vehicle_id: UUID, *, us
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
     await _assert_vehicle_access(db, org_id, vehicle, user)
+
+    # Vehicles may be referenced by mission assignments.
+    # To allow deletion (as a registry cleanup action), remove those assignments first.
+    # Also clear any direct mission.vehicle_id references (not an FK, but keeps data consistent).
+    from backend.services.mission.models import Mission, MissionAssignment  # local import to avoid circular imports
+
+    await db.execute(
+        delete(MissionAssignment).where(MissionAssignment.vehicle_id == vehicle.id)
+    )
+    await db.execute(
+        update(Mission).where(Mission.vehicle_id == vehicle.id).values(vehicle_id=None)
+    )
     await db.delete(vehicle)
 
 
@@ -181,12 +244,13 @@ async def delete_fleet(db: AsyncSession, org_id: UUID, fleet_id: UUID) -> None:
     if not fleet:
         raise HTTPException(status_code=404, detail="Fleet not found")
 
-    count = (await db.execute(
-        select(func.count()).where(Vehicle.fleet_id == fleet.id)
-    )).scalar() or 0
-
-    if count > 0:
-        raise HTTPException(status_code=409, detail="Fleet has assigned vehicles")
+    # Do not delete vehicles when deleting a fleet.
+    # Instead, unassign all vehicles from the fleet.
+    await db.execute(
+        update(Vehicle)
+        .where(Vehicle.organization_id == org_id, Vehicle.fleet_id == fleet.id)
+        .values(fleet_id=None)
+    )
 
     await db.delete(fleet)
 

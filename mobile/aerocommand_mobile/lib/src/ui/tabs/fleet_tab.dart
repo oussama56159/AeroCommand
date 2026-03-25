@@ -9,6 +9,7 @@ import '../../api/api_client.dart';
 import '../../auth/auth_controller.dart';
 import '../../config/endpoint_controller.dart';
 import '../../models/vehicle_model.dart';
+import '../../mock/demo_repository.dart';
 import '../../realtime/realtime_controller.dart';
 import '../../realtime/telemetry_summary.dart';
 import '../screens/drone_details_screen.dart';
@@ -65,6 +66,15 @@ class _FleetTabState extends State<FleetTab> {
       _error = null;
     });
     try {
+      final auth = context.read<AuthController>();
+      if (auth.isDemo) {
+        final repo = DemoRepository.instance;
+        repo.ensureInitialized();
+        final items = repo.listVehicles().map((e) => VehicleModel.fromJson(e)).toList();
+        setState(() => _vehicles = items);
+        return;
+      }
+
       final api = context.read<ApiClient>();
       final res = await api.getJson('/fleet/vehicles', query: {'page': '1', 'page_size': '200'});
       if (res is Map && res['items'] is List) {
@@ -222,6 +232,7 @@ class _FleetMapCardState extends State<_FleetMapCard> {
         _VehicleMarker(
           vehicleId: v.id,
           name: v.name,
+          vehicleType: v.type,
           state: state,
           headingDeg: t.heading,
           point: LatLng(t.lat, t.lng),
@@ -278,7 +289,7 @@ class _FleetMapCardState extends State<_FleetMapCard> {
                     initialZoom: widget.defaultZoom,
                     minZoom: 3,
                     maxZoom: 22,
-                    onTap: (_, __) => setState(() => _selectedVehicleId = null),
+                    onTap: (_, _) => setState(() => _selectedVehicleId = null),
                   ),
                   children: [
                     TileLayer(
@@ -300,6 +311,7 @@ class _FleetMapCardState extends State<_FleetMapCard> {
                                 vm: DroneMarkerViewModel(
                                   vehicleId: m.vehicleId,
                                   name: m.name,
+                                  vehicleType: m.vehicleType,
                                   state: m.state,
                                   headingDeg: m.headingDeg,
                                   altMeters: m.altMeters,
@@ -415,6 +427,7 @@ class _VehicleMarker {
   _VehicleMarker({
     required this.vehicleId,
     required this.name,
+    required this.vehicleType,
     required this.state,
     required this.headingDeg,
     required this.point,
@@ -424,6 +437,7 @@ class _VehicleMarker {
 
   final String vehicleId;
   final String name;
+  final String vehicleType;
   final DroneOperationalState state;
   final double headingDeg;
   final LatLng point;
@@ -515,7 +529,15 @@ class _VehicleAtAGlanceCard extends StatelessWidget {
             children: [
               Stack(
                 children: [
-                  DroneLogo(size: 34, color: scheme.onSurface),
+                  DroneLogo(
+                    size: 34,
+                    color: scheme.onSurface,
+                    rotorCount: vehicle.type == 'hexacopter'
+                        ? 6
+                        : vehicle.type == 'octocopter'
+                            ? 8
+                            : 4,
+                  ),
                   Positioned(
                     right: 0,
                     bottom: 0,

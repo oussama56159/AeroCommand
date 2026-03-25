@@ -71,22 +71,90 @@ function createWaypointIcon(index, { selected = false } = {}) {
   });
 }
 
-function createDroneIcon(heading = 0, status = 'idle') {
+function resolveRotorCount(vehicleType) {
+  switch (vehicleType) {
+    case 'hexacopter':
+      return 6;
+    case 'octocopter':
+      return 8;
+    case 'quadcopter':
+    default:
+      return 4;
+  }
+}
+
+function getRotorPoints(rotorCount) {
+  if (rotorCount === 4) {
+    return [
+      { x: 14, y: 14 },
+      { x: 50, y: 14 },
+      { x: 14, y: 50 },
+      { x: 50, y: 50 },
+    ];
+  }
+
+  const cx = 32;
+  const cy = 32;
+  const radius = 22;
+  const startAngleDeg = -90;
+  return Array.from({ length: rotorCount }, (_, i) => {
+    const angle = ((startAngleDeg + (i * 360) / rotorCount) * Math.PI) / 180;
+    const x = cx + radius * Math.cos(angle);
+    const y = cy + radius * Math.sin(angle);
+    return { x: x.toFixed(1), y: y.toFixed(1) };
+  });
+}
+
+function createRoverSvg(color) {
+  return `
+    <svg width="28" height="28" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+      <rect x="14" y="30" width="36" height="14" rx="4" fill="${color}" stroke="rgba(15,23,42,0.9)" stroke-width="4" />
+      <rect x="16" y="24" width="22" height="10" rx="3" fill="${color}" stroke="rgba(255,255,255,0.95)" stroke-width="2" />
+      <line x1="20" y1="28" x2="34" y2="28" stroke="rgba(255,255,255,0.95)" stroke-width="2" stroke-linecap="round" />
+      <circle cx="22" cy="46" r="6" fill="${color}" stroke="rgba(255,255,255,0.95)" stroke-width="2" />
+      <circle cx="42" cy="46" r="6" fill="${color}" stroke="rgba(255,255,255,0.95)" stroke-width="2" />
+      <circle cx="22" cy="46" r="2" fill="rgba(255,255,255,0.95)" />
+      <circle cx="42" cy="46" r="2" fill="rgba(255,255,255,0.95)" />
+      <path d="M32 18 L27 28 L37 28 Z" fill="rgba(255,255,255,0.95)" />
+    </svg>
+  `;
+}
+
+function createDroneIcon(heading = 0, status = 'idle', vehicleType = 'quadcopter') {
   const color = DRONE_STATUS_COLORS[status] || DRONE_STATUS_COLORS.idle;
+  if (vehicleType === 'rover') {
+    return L.divIcon({
+      className: 'aero-drone-icon',
+      html: `
+        <div style="transform:rotate(${heading}deg);width:28px;height:28px;display:flex;align-items:center;justify-content:center;">
+          ${createRoverSvg(color)}
+        </div>
+      `,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+    });
+  }
+  const rotorCount = resolveRotorCount(vehicleType);
+  const points = getRotorPoints(rotorCount);
+  const armsSvg = points
+    .map(
+      (p) =>
+        `<line x1="32" y1="32" x2="${p.x}" y2="${p.y}" stroke="rgba(255,255,255,0.95)" stroke-width="3" stroke-linecap="round" />`
+    )
+    .join('');
+  const rotorsSvg = points
+    .map(
+      (p) =>
+        `<circle cx="${p.x}" cy="${p.y}" r="7" fill="${color}" stroke="rgba(255,255,255,0.95)" stroke-width="2" />`
+    )
+    .join('');
   return L.divIcon({
     className: 'aero-drone-icon',
     html: `
       <div style="transform:rotate(${heading}deg);width:28px;height:28px;display:flex;align-items:center;justify-content:center;">
         <svg width="28" height="28" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-          <line x1="32" y1="32" x2="14" y2="14" stroke="rgba(255,255,255,0.95)" stroke-width="3" stroke-linecap="round" />
-          <line x1="32" y1="32" x2="50" y2="14" stroke="rgba(255,255,255,0.95)" stroke-width="3" stroke-linecap="round" />
-          <line x1="32" y1="32" x2="14" y2="50" stroke="rgba(255,255,255,0.95)" stroke-width="3" stroke-linecap="round" />
-          <line x1="32" y1="32" x2="50" y2="50" stroke="rgba(255,255,255,0.95)" stroke-width="3" stroke-linecap="round" />
-
-          <circle cx="14" cy="14" r="7" fill="${color}" stroke="rgba(255,255,255,0.95)" stroke-width="2" />
-          <circle cx="50" cy="14" r="7" fill="${color}" stroke="rgba(255,255,255,0.95)" stroke-width="2" />
-          <circle cx="14" cy="50" r="7" fill="${color}" stroke="rgba(255,255,255,0.95)" stroke-width="2" />
-          <circle cx="50" cy="50" r="7" fill="${color}" stroke="rgba(255,255,255,0.95)" stroke-width="2" />
+          ${armsSvg}
+          ${rotorsSvg}
 
           <circle cx="32" cy="32" r="9" fill="${color}" stroke="rgba(15,23,42,0.9)" stroke-width="4" />
           <circle cx="32" cy="32" r="9" fill="none" stroke="rgba(255,255,255,0.95)" stroke-width="2" />
@@ -489,6 +557,7 @@ export default function MissionPlannerPage() {
           id: v.id,
           name: v.name,
           callsign: v.callsign,
+          type: v.type,
           lat,
           lng,
           heading: Number(t.heading) || 0,
@@ -1046,7 +1115,7 @@ export default function MissionPlannerPage() {
                     <Marker
                       key={`drone-${drone.id}`}
                       position={[drone.lat, drone.lng]}
-                      icon={createDroneIcon(drone.heading, drone.status)}
+                      icon={createDroneIcon(drone.heading, drone.status, drone.type)}
                     >
                       <Popup>
                         <div className="space-y-2 text-xs text-slate-100 min-w-[190px]">

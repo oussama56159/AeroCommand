@@ -10,6 +10,7 @@ class DroneMarkerViewModel {
   DroneMarkerViewModel({
     required this.vehicleId,
     required this.name,
+    required this.vehicleType,
     required this.state,
     required this.headingDeg,
     this.altMeters,
@@ -18,10 +19,23 @@ class DroneMarkerViewModel {
 
   final String vehicleId;
   final String name;
+  final String vehicleType;
   final DroneOperationalState state;
   final double headingDeg;
   final double? altMeters;
   final double? speedMps;
+
+  int get rotorCount {
+    switch (vehicleType) {
+      case 'hexacopter':
+        return 6;
+      case 'octocopter':
+        return 8;
+      case 'quadcopter':
+      default:
+        return 4;
+    }
+  }
 
   String get semanticsLabel => 'Drone $name — ${DroneMapStyle.stateLabel(state)}';
 
@@ -39,7 +53,7 @@ class DroneMarkerViewModel {
   }
 
   String tooltipText({bool includeOptional = true}) {
-    final base = '${name}\nState: ${DroneMapStyle.stateLabel(state)}';
+    final base = '$name\nState: ${DroneMapStyle.stateLabel(state)}';
     if (!includeOptional) return base;
 
     final parts = <String>[];
@@ -111,6 +125,7 @@ class _DroneMapMarkerState extends State<DroneMapMarker> {
             child: DroneLogo(
               size: 15,
               color: scheme.surface,
+              rotorCount: widget.vm.rotorCount,
             ),
           ),
         ),
@@ -120,6 +135,7 @@ class _DroneMapMarkerState extends State<DroneMapMarker> {
     final label = _DroneNameLabel(
       name: widget.vm.name,
       highlighted: shouldHighlight,
+      rotorCount: widget.vm.rotorCount,
     );
 
     // Width must include room for the label, while keeping the marker centered at the GPS point.
@@ -131,6 +147,7 @@ class _DroneMapMarkerState extends State<DroneMapMarker> {
       title: widget.vm.name,
       subtitle: widget.vm.infoLine(),
       highlighted: shouldHighlight,
+      rotorCount: widget.vm.rotorCount,
     );
 
     final child = SizedBox(
@@ -192,6 +209,7 @@ class _DroneInfoBubble extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.highlighted,
+    required this.rotorCount,
   });
 
   static const double width = 170;
@@ -200,6 +218,7 @@ class _DroneInfoBubble extends StatelessWidget {
   final String title;
   final String subtitle;
   final bool highlighted;
+  final int rotorCount;
 
   @override
   Widget build(BuildContext context) {
@@ -230,6 +249,8 @@ class _DroneInfoBubble extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 10),
             child: Row(
               children: [
+                DroneLogo(size: 14, color: scheme.onSurface, rotorCount: rotorCount),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     title,
@@ -267,12 +288,14 @@ class _DroneNameLabel extends StatelessWidget {
   const _DroneNameLabel({
     required this.name,
     required this.highlighted,
+    required this.rotorCount,
   });
 
   static const double height = 26;
 
   final String name;
   final bool highlighted;
+  final int rotorCount;
 
   @override
   Widget build(BuildContext context) {
@@ -291,15 +314,24 @@ class _DroneNameLabel extends StatelessWidget {
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          child: Text(
-            name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: scheme.onSurface,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DroneLogo(size: 16, color: scheme.onSurface, rotorCount: rotorCount),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: scheme.onSurface,
+                      ),
                 ),
+              ),
+            ],
           ),
         ),
       ),

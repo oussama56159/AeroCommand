@@ -42,11 +42,70 @@ class DemoRepository {
     ]);
 
     _vehicles.addAll([
-      {'id': 'demo-drone-1', 'name': 'Falcon 01', 'callsign': 'F01', 'status': 'online', 'fleet_id': fleetA},
-      {'id': 'demo-drone-2', 'name': 'Falcon 02', 'callsign': 'F02', 'status': 'in_flight', 'fleet_id': fleetA},
-      {'id': 'demo-drone-3', 'name': 'Falcon 03', 'callsign': 'F03', 'status': 'online', 'fleet_id': fleetA},
-      {'id': 'demo-drone-4', 'name': 'Ranger 01', 'callsign': 'R01', 'status': 'in_flight', 'fleet_id': fleetB},
-      {'id': 'demo-drone-5', 'name': 'Ranger 02', 'callsign': 'R02', 'status': 'online', 'fleet_id': fleetB},
+      {
+        'id': 'demo-drone-1',
+        'name': 'Falcon 01',
+        'callsign': 'F01',
+        'type': 'quadcopter',
+        'status': 'online',
+        'fleet_id': fleetA,
+      },
+      {
+        'id': 'demo-drone-2',
+        'name': 'Falcon 02',
+        'callsign': 'F02',
+        'type': 'hexacopter',
+        'status': 'in_flight',
+        'fleet_id': fleetA,
+      },
+      {
+        'id': 'demo-drone-3',
+        'name': 'Falcon 03',
+        'callsign': 'F03',
+        'type': 'octocopter',
+        'status': 'online',
+        'fleet_id': fleetA,
+      },
+      {
+        'id': 'demo-drone-4',
+        'name': 'Ranger 01',
+        'callsign': 'R01',
+        'type': 'quadcopter',
+        'status': 'in_flight',
+        'fleet_id': fleetB,
+      },
+      {
+        'id': 'demo-drone-5',
+        'name': 'Ranger 02',
+        'callsign': 'R02',
+        'type': 'hexacopter',
+        'status': 'online',
+        'fleet_id': fleetB,
+      },
+      {
+        'id': 'demo-drone-6',
+        'name': 'Sentinel 01',
+        'callsign': 'S01',
+        'type': 'octocopter',
+        'status': 'online',
+        'fleet_id': fleetA,
+      },
+      {
+        'id': 'demo-drone-7',
+        'name': 'Sentinel 02',
+        'callsign': 'S02',
+        'type': 'quadcopter',
+        'status': 'in_flight',
+        'fleet_id': fleetB,
+      },
+      {
+        'id': 'demo-drone-8',
+        'name': 'Atlas 01',
+        'callsign': 'A01',
+        'type': 'hexacopter',
+        'status': 'online',
+        'fleet_id': fleetA,
+      },
     ]);
 
     _missions.addAll([
@@ -76,6 +135,9 @@ class DemoRepository {
     _seedTelemetry('demo-drone-3', lat: 36.8068, lng: 10.1804, heading: 240, speed: 2.5, alt: 25, battery: 88);
     _seedTelemetry('demo-drone-4', lat: 36.8058, lng: 10.1831, heading: 300, speed: 10.0, alt: 90, battery: 64);
     _seedTelemetry('demo-drone-5', lat: 36.8070, lng: 10.1840, heading: 190, speed: 1.2, alt: 18, battery: 97);
+    _seedTelemetry('demo-drone-6', lat: 36.8063, lng: 10.1809, heading: 15, speed: 3.2, alt: 42, battery: 84);
+    _seedTelemetry('demo-drone-7', lat: 36.8054, lng: 10.1819, heading: 265, speed: 11.5, alt: 110, battery: 58);
+    _seedTelemetry('demo-drone-8', lat: 36.8076, lng: 10.1826, heading: 145, speed: 1.8, alt: 22, battery: 95);
 
     _pushAlert(
       vehicleId: 'demo-drone-2',

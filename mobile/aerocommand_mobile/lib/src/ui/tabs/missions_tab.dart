@@ -8,6 +8,7 @@ import '../../auth/auth_controller.dart';
 import '../../models/fleet_model.dart';
 import '../../models/mission_model.dart';
 import '../../models/vehicle_model.dart';
+import '../../mock/demo_repository.dart';
 import '../widgets/drone_logo.dart';
 
 class MissionsTab extends StatefulWidget {
@@ -70,6 +71,18 @@ class _MissionsTabState extends State<MissionsTab> {
       _error = null;
     });
     try {
+      final auth = context.read<AuthController>();
+      if (auth.isDemo) {
+        final repo = DemoRepository.instance;
+        repo.ensureInitialized();
+
+        _missions = repo.listMissions().map((e) => MissionModel.fromJson(e)).toList();
+        _vehicles = repo.listVehicles().map((e) => VehicleModel.fromJson(e)).toList();
+        _fleets = repo.listFleets().map((e) => FleetModel.fromJson(e)).toList();
+        setState(() {});
+        return;
+      }
+
       final api = context.read<ApiClient>();
       final missionsRes = await api.getJson('/missions');
       final vehiclesRes = await api.getJson('/fleet/vehicles', query: {'page': '1', 'page_size': '200'});
@@ -126,6 +139,18 @@ class _MissionsTabState extends State<MissionsTab> {
     }
     final fleetId = _selectedFleetId;
     if (fleetId == null) return [];
+
+    final auth = context.read<AuthController>();
+    if (auth.isDemo) {
+      final repo = DemoRepository.instance;
+      repo.ensureInitialized();
+      return repo
+          .listVehicles(fleetId: fleetId)
+          .map((e) => e['id']?.toString())
+          .whereType<String>()
+          .toList();
+    }
+
     final api = context.read<ApiClient>();
     final vehiclesRes = await api.getJson('/fleet/vehicles', query: {'page': '1', 'page_size': '200', 'fleet_id': fleetId});
     if (vehiclesRes is Map && vehiclesRes['items'] is List) {

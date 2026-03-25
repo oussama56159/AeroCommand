@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'dart:math' as math;
 
 class DroneLogo extends StatelessWidget {
-  const DroneLogo({super.key, this.size = 24, this.color});
+  const DroneLogo({super.key, this.size = 24, this.color, this.rotorCount = 4});
 
   final double size;
   final Color? color;
+  final int rotorCount;
 
   @override
   Widget build(BuildContext context) {
@@ -14,16 +16,17 @@ class DroneLogo extends StatelessWidget {
       width: size,
       height: size,
       child: CustomPaint(
-        painter: _DroneLogoPainter(color: resolvedColor),
+        painter: _DroneLogoPainter(color: resolvedColor, rotorCount: rotorCount),
       ),
     );
   }
 }
 
 class _DroneLogoPainter extends CustomPainter {
-  _DroneLogoPainter({required this.color});
+  _DroneLogoPainter({required this.color, required this.rotorCount});
 
   final Color color;
+  final int rotorCount;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -55,12 +58,21 @@ class _DroneLogoPainter extends CustomPainter {
     final propOffset = arm;
     final propR = s * 0.11;
 
-    final props = <Offset>[
-      Offset(c.dx - propOffset, c.dy - propOffset),
-      Offset(c.dx + propOffset, c.dy - propOffset),
-      Offset(c.dx - propOffset, c.dy + propOffset),
-      Offset(c.dx + propOffset, c.dy + propOffset),
-    ];
+    final resolvedRotors = rotorCount <= 0 ? 4 : rotorCount;
+    final props = resolvedRotors == 4
+        ? <Offset>[
+            Offset(c.dx - propOffset, c.dy - propOffset),
+            Offset(c.dx + propOffset, c.dy - propOffset),
+            Offset(c.dx - propOffset, c.dy + propOffset),
+            Offset(c.dx + propOffset, c.dy + propOffset),
+          ]
+        : <Offset>[
+            for (var i = 0; i < resolvedRotors; i++)
+              Offset(
+                c.dx + math.cos((-math.pi / 2) + (2 * math.pi * i / resolvedRotors)) * (s * 0.34),
+                c.dy + math.sin((-math.pi / 2) + (2 * math.pi * i / resolvedRotors)) * (s * 0.34),
+              ),
+          ];
 
     for (final p in props) {
       canvas.drawLine(c, p, paint);
@@ -78,5 +90,6 @@ class _DroneLogoPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _DroneLogoPainter oldDelegate) => oldDelegate.color != color;
+  bool shouldRepaint(covariant _DroneLogoPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.rotorCount != rotorCount;
 }

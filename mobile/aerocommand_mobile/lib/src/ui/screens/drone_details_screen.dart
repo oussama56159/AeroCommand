@@ -65,6 +65,7 @@ class _DroneDetailsScreenState extends State<DroneDetailsScreen> {
     final callsign = _vehicle?['callsign']?.toString();
     final status = _vehicle?['status']?.toString();
     final fleetId = _vehicle?['fleet_id']?.toString();
+    final vehicleType = _vehicle?['type']?.toString();
 
     return Scaffold(
       appBar: AppBar(
@@ -93,7 +94,15 @@ class _DroneDetailsScreenState extends State<DroneDetailsScreen> {
 
                   Row(
                     children: [
-                      DroneLogo(size: 34, color: scheme.primary),
+                      DroneLogo(
+                        size: 34,
+                        color: scheme.primary,
+                        rotorCount: vehicleType == 'hexacopter'
+                            ? 6
+                            : vehicleType == 'octocopter'
+                                ? 8
+                                : 4,
+                      ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(

@@ -1,6 +1,21 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Plus, Radar, Grid3X3, List, Pencil, Trash2, Users, UserPlus } from 'lucide-react';
+import {
+  Search,
+  Plus,
+  Radar,
+  Grid3X3,
+  List,
+  Pencil,
+  Trash2,
+  Users,
+  UserPlus,
+  Plane,
+  PlaneTakeoff,
+  Car,
+  Ship,
+  Waves,
+} from 'lucide-react';
 import Card from '@/components/ui/Card';
 import ActionButton from '@/components/actions/ActionButton';
 import Button from '@/components/ui/Button';
@@ -16,21 +31,75 @@ import { useAuthStore } from '@/stores/authStore';
 import { useMissionStore } from '@/stores/missionStore';
 import { userAPI } from '@/lib/api/endpoints';
 
+function CopterTypeIcon({ rotorCount = 4, className }) {
+  const getRotorPoints = () => {
+    if (rotorCount === 4) {
+      return [
+        { x: 14, y: 14 },
+        { x: 50, y: 14 },
+        { x: 14, y: 50 },
+        { x: 50, y: 50 },
+      ];
+    }
+
+    const cx = 32;
+    const cy = 32;
+    const radius = 22;
+    const startAngleDeg = -90;
+    return Array.from({ length: rotorCount }, (_, i) => {
+      const angle = ((startAngleDeg + (i * 360) / rotorCount) * Math.PI) / 180;
+      return { x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) };
+    });
+  };
+
+  const points = getRotorPoints();
+  return (
+    <svg className={className} viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      {points.map((p, i) => (
+        <line key={`arm-${i}`} x1="32" y1="32" x2={p.x} y2={p.y} stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+      ))}
+      {points.map((p, i) => (
+        <circle key={`rotor-${i}`} cx={p.x} cy={p.y} r="7" fill="currentColor" />
+      ))}
+
+      <circle cx="32" cy="32" r="10" fill="currentColor" />
+      <path d="M32 18 L27 28 L37 28 Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+const QuadcopterIcon = (props) => <CopterTypeIcon rotorCount={4} {...props} />;
+const HexacopterIcon = (props) => <CopterTypeIcon rotorCount={6} {...props} />;
+const OctocopterIcon = (props) => <CopterTypeIcon rotorCount={8} {...props} />;
+
+const VEHICLE_TYPE_ICON_MAP = {
+  [VEHICLE_TYPES.QUADCOPTER]: QuadcopterIcon,
+  [VEHICLE_TYPES.HEXACOPTER]: HexacopterIcon,
+  [VEHICLE_TYPES.OCTOCOPTER]: OctocopterIcon,
+  [VEHICLE_TYPES.FIXED_WING]: Plane,
+  [VEHICLE_TYPES.VTOL]: PlaneTakeoff,
+  [VEHICLE_TYPES.ROVER]: Car,
+  [VEHICLE_TYPES.SUBMARINE]: Waves,
+};
+
 function VehicleCard({ vehicle, onEdit, onDelete }) {
   const telemetry = useTelemetryStore((s) => s.vehicleTelemetry[vehicle.id]);
   const navigate = useNavigate();
   const battery = telemetry?.battery ?? vehicle.battery;
+  const TypeIcon = VEHICLE_TYPE_ICON_MAP[vehicle.type] || Ship;
 
   return (
-    <Card hover onClick={() => navigate(`/fleet/${vehicle.id}`)}>
+    <Card hover onClick={() => navigate(`/app/fleet/${vehicle.id}`)}>
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-slate-700 flex items-center justify-center">
-            <Radar className="w-5 h-5 text-blue-400" />
+          <div className="w-12 h-12 rounded-xl bg-slate-700 flex items-center justify-center">
+            <TypeIcon className="w-7 h-7 text-blue-400" />
           </div>
           <div>
             <h3 className="text-sm font-semibold text-slate-100">{vehicle.name}</h3>
-            <p className="text-xs text-slate-500">{vehicle.callsign} • {vehicle.type}</p>
+            <p className="text-xs text-slate-500">
+              {vehicle.callsign} • <span>{vehicle.type}</span>
+            </p>
           </div>
         </div>
         <StatusIndicator status={vehicle.status} showLabel size="md" />
@@ -179,6 +248,9 @@ export default function FleetPage() {
   const [selectedMemberIds, setSelectedMemberIds] = useState([]);
   const [originalMemberIds, setOriginalMemberIds] = useState([]);
   const [usersLoading, setUsersLoading] = useState(false);
+  const [fleetUsersLoading, setFleetUsersLoading] = useState(false);
+  const [fleetMemberIds, setFleetMemberIds] = useState([]);
+  const [originalFleetMemberIds, setOriginalFleetMemberIds] = useState([]);
   const [form, setForm] = useState({
     name: '',
     callsign: '',
@@ -191,7 +263,9 @@ export default function FleetPage() {
   const [fleetForm, setFleetForm] = useState({
     name: '',
     description: '',
+    vehicle_ids: [],
   });
+  const [originalFleetVehicleIds, setOriginalFleetVehicleIds] = useState([]);
 
   useEffect(() => {
     fetchVehicles();
@@ -229,16 +303,42 @@ export default function FleetPage() {
 
   const openFleetCreate = () => {
     setEditingFleet(null);
-    setFleetForm({ name: '', description: '' });
+    setFleetForm({ name: '', description: '', vehicle_ids: [] });
+    setOriginalFleetVehicleIds([]);
+    setFleetMemberIds([]);
+    setOriginalFleetMemberIds([]);
+    setFleetUsersLoading(true);
+    userAPI
+      .list()
+      .then((res) => setUsers(res.data || []))
+      .catch(() => setUsers([]))
+      .finally(() => setFleetUsersLoading(false));
     setShowFleetModal(true);
   };
 
   const openFleetEdit = (fleet) => {
     setEditingFleet(fleet);
+    const assignedVehicleIds = vehicles.filter((v) => v.fleet_id === fleet.id).map((v) => v.id);
     setFleetForm({
       name: fleet.name || '',
       description: fleet.description || '',
+      vehicle_ids: assignedVehicleIds,
     });
+    setOriginalFleetVehicleIds(assignedVehicleIds);
+
+    setFleetUsersLoading(true);
+    Promise.all([
+      fetchFleetUsers(fleet.id).catch(() => []),
+      userAPI.list().then((res) => res.data).catch(() => []),
+    ])
+      .then(([assigned, userList]) => {
+        const assignedIds = (assigned || []).map((u) => u.user_id);
+        setUsers(userList || []);
+        setFleetMemberIds(assignedIds);
+        setOriginalFleetMemberIds(assignedIds);
+      })
+      .finally(() => setFleetUsersLoading(false));
+
     setShowFleetModal(true);
   };
 
@@ -252,19 +352,54 @@ export default function FleetPage() {
       description: fleetForm.description.trim() || null,
     };
     try {
+      const desiredVehicleIds = (fleetForm.vehicle_ids || []).filter(Boolean);
+      const desiredMemberIds = (fleetMemberIds || []).filter(Boolean);
+
+      let savedFleet;
       if (editingFleet) {
-        await updateFleet(editingFleet.id, payload);
-        addToast({ type: 'success', title: 'Fleet updated', message: `${payload.name} updated.` });
+        savedFleet = await updateFleet(editingFleet.id, payload);
       } else {
-        await createFleet(payload);
-        addToast({ type: 'success', title: 'Fleet created', message: `${payload.name} added.` });
+        savedFleet = await createFleet(payload);
       }
+
+      const fleetId = savedFleet?.id || (editingFleet ? editingFleet.id : null);
+      if (fleetId) {
+        const toAssign = desiredVehicleIds.filter((id) => !originalFleetVehicleIds.includes(id));
+        const toUnassign = originalFleetVehicleIds.filter((id) => !desiredVehicleIds.includes(id));
+
+        if (toAssign.length || toUnassign.length) {
+          await Promise.all([
+            ...toAssign.map((id) => updateVehicle(id, { fleet_id: fleetId })),
+            ...toUnassign.map((id) => updateVehicle(id, { fleet_id: null })),
+          ]);
+        }
+
+        const membersToAdd = desiredMemberIds.filter((id) => !originalFleetMemberIds.includes(id));
+        const membersToRemove = originalFleetMemberIds.filter((id) => !desiredMemberIds.includes(id));
+
+        if (membersToAdd.length) await assignUsersToFleet(fleetId, membersToAdd);
+        for (const userId of membersToRemove) {
+          await removeUserFromFleet(fleetId, userId);
+        }
+      }
+
+      await Promise.all([fetchVehicles(), fetchFleets()]);
+
+      addToast({
+        type: 'success',
+        title: editingFleet ? 'Fleet updated' : 'Fleet created',
+        message: editingFleet ? `${payload.name} updated.` : `${payload.name} added.`,
+      });
       setShowFleetModal(false);
     } catch (err) {
       const message = err?.response?.data?.detail || err?.message || 'Failed to save fleet.';
       addToast({ type: 'error', title: 'Fleet save failed', message });
     }
   };
+
+  const eligibleFleetVehicles = editingFleet
+    ? vehicles.filter((v) => !v.fleet_id || v.fleet_id === editingFleet.id)
+    : vehicles.filter((v) => !v.fleet_id);
 
   const handleFleetDelete = async (fleet) => {
     try {
@@ -281,13 +416,14 @@ export default function FleetPage() {
       addToast({ type: 'error', title: 'Missing fields', message: 'Name and callsign are required.' });
       return;
     }
+    const serial = (form.serial_number || '').trim();
     const payload = {
       name: form.name.trim(),
       callsign: form.callsign.trim(),
       type: form.type,
       fleet_id: form.fleet_id || null,
       firmware: form.firmware || null,
-      serial_number: form.serial_number || null,
+      serial_number: serial || null,
       hardware_id: form.hardware_id || null,
     };
     try {
@@ -308,6 +444,7 @@ export default function FleetPage() {
   const handleDelete = async (vehicle) => {
     try {
       await deleteVehicle(vehicle.id);
+      await fetchVehicles();
       addToast({ type: 'success', title: 'Vehicle deleted', message: `${vehicle.name} removed.` });
     } catch (err) {
       const message = err?.response?.data?.detail || err?.message || 'Failed to delete vehicle.';
@@ -510,7 +647,10 @@ export default function FleetPage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input label="Firmware" placeholder="PX4 1.14.3" value={form.firmware} onChange={(e) => setForm((s) => ({ ...s, firmware: e.target.value }))} />
-            <Input label="Serial Number" placeholder="SN-001" value={form.serial_number} onChange={(e) => setForm((s) => ({ ...s, serial_number: e.target.value }))} />
+            <div>
+              <Input label="Serial Number" placeholder="Leave blank to auto-generate" value={form.serial_number} onChange={(e) => setForm((s) => ({ ...s, serial_number: e.target.value }))} />
+              <p className="mt-1 text-xs text-slate-500">Leave blank to auto-generate (SN-001, SN-002, ...).</p>
+            </div>
           </div>
           <Input label="Hardware ID" placeholder="HW-ABC-123" value={form.hardware_id} onChange={(e) => setForm((s) => ({ ...s, hardware_id: e.target.value }))} />
         </div>
@@ -520,7 +660,7 @@ export default function FleetPage() {
         isOpen={showFleetModal}
         onClose={() => setShowFleetModal(false)}
         title={editingFleet ? 'Edit Fleet' : 'Add Fleet'}
-        size="sm"
+        size="md"
         footer={
           <>
             <ActionButton actionId="nav.goto.dashboard" variant="secondary" onAction={() => setShowFleetModal(false)}>Cancel</ActionButton>
@@ -541,6 +681,77 @@ export default function FleetPage() {
               value={fleetForm.description}
               onChange={(e) => setFleetForm((s) => ({ ...s, description: e.target.value }))}
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1.5">Assign Vehicles (optional)</label>
+            {eligibleFleetVehicles.length === 0 ? (
+              <div className="text-sm text-slate-400">
+                {editingFleet ? 'No unassigned vehicles available.' : 'No unassigned vehicles available.'}
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-auto pr-1">
+                {eligibleFleetVehicles
+                  .slice()
+                  .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+                  .map((vehicle) => (
+                    <label key={vehicle.id} className="flex items-center gap-3 p-2 rounded-lg border border-slate-700/60 bg-slate-800/60">
+                      <input
+                        type="checkbox"
+                        className="accent-blue-500"
+                        checked={(fleetForm.vehicle_ids || []).includes(vehicle.id)}
+                        onChange={() =>
+                          setFleetForm((prev) => {
+                            const ids = prev.vehicle_ids || [];
+                            return ids.includes(vehicle.id)
+                              ? { ...prev, vehicle_ids: ids.filter((id) => id !== vehicle.id) }
+                              : { ...prev, vehicle_ids: [...ids, vehicle.id] };
+                          })
+                        }
+                      />
+                      <div className="flex-1">
+                        <div className="text-sm text-slate-200">{vehicle.name}</div>
+                        <div className="text-xs text-slate-500">{vehicle.callsign}{vehicle.serial_number ? ` • ${vehicle.serial_number}` : ''}</div>
+                      </div>
+                    </label>
+                  ))}
+              </div>
+            )}
+            <p className="mt-1 text-xs text-slate-500">
+              {editingFleet
+                ? 'Shows unassigned vehicles and vehicles already in this fleet.'
+                : 'Only unassigned vehicles can be selected here.'}
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1.5">Assign Members (optional)</label>
+            {fleetUsersLoading ? (
+              <div className="text-sm text-slate-400">Loading users...</div>
+            ) : users.length === 0 ? (
+              <div className="text-sm text-slate-400">No users available.</div>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-auto pr-1">
+                {users.map((user) => (
+                  <label key={user.id} className="flex items-center gap-3 p-2 rounded-lg border border-slate-700/60 bg-slate-800/60">
+                    <input
+                      type="checkbox"
+                      className="accent-blue-500"
+                      checked={fleetMemberIds.includes(user.id)}
+                      onChange={() =>
+                        setFleetMemberIds((prev) => (
+                          prev.includes(user.id) ? prev.filter((id) => id !== user.id) : [...prev, user.id]
+                        ))
+                      }
+                    />
+                    <div className="flex-1">
+                      <div className="text-sm text-slate-200">{user.name}</div>
+                      <div className="text-xs text-slate-500">{user.email} • {user.role}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </Modal>
