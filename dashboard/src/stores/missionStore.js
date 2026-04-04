@@ -22,6 +22,11 @@ const normalizeWaypoint = (waypoint, index) => {
     alt: Number.isFinite(altValue) ? altValue : 100,
     altitude_mode: waypoint?.altitude_mode || waypoint?.altMode || 'relative',
     command: waypoint?.command || 'NAV_WAYPOINT',
+    frame: Number.isFinite(Number(waypoint?.frame)) ? Number(waypoint.frame) : 3,
+    param1: Number.isFinite(Number(waypoint?.param1)) ? Number(waypoint.param1) : 0,
+    param2: Number.isFinite(Number(waypoint?.param2)) ? Number(waypoint.param2) : 0,
+    param3: Number.isFinite(Number(waypoint?.param3)) ? Number(waypoint.param3) : 0,
+    param4: Number.isFinite(Number(waypoint?.param4)) ? Number(waypoint.param4) : 0,
   };
 };
 

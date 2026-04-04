@@ -1,6 +1,6 @@
 /**
  * MockModeProvider: Renders nothing but activates mock data simulation
- * when VITE_MOCK_MODE=true or no backend is available.
+ * when mock mode is explicitly enabled through localStorage or VITE_MOCK_MODE.
  * Placed inside the React tree so hooks work properly.
  */
 import { useMockMode } from './useMockMode';

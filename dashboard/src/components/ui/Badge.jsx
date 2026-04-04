@@ -12,6 +12,7 @@ const colorMap = {
 
 const statusColorMap = {
   online: 'green',
+  idle: 'green',
   offline: 'gray',
   armed: 'red',
   disarmed: 'green',

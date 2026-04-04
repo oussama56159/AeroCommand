@@ -1,14 +1,16 @@
 import {
-  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
+  BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, AreaChart, Area, Legend,
 } from 'recharts';
 import Card, { CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import Badge from '@/components/ui/Badge';
-import { mockAnalytics } from '@/lib/mock/mockData';
 import { Clock, TrendingUp, Target, AlertTriangle } from 'lucide-react';
+import { useMemo } from 'react';
+import { useFleetStore } from '@/stores/fleetStore';
+import { useTelemetryStore } from '@/stores/telemetryStore';
+import { useMissionStore } from '@/stores/missionStore';
+import { buildLiveOpsMetrics } from '@/lib/analytics/liveMetrics';
 
 const chartTooltipStyle = { backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: 8, color: '#f1f5f9' };
-const COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
 
 function StatCard({ icon: Icon, label, value, sub, color = 'blue' }) {
   const colors = { blue: 'from-blue-500 to-blue-600', green: 'from-emerald-500 to-emerald-600', amber: 'from-amber-500 to-amber-600', purple: 'from-purple-500 to-purple-600' };
@@ -29,30 +31,39 @@ function StatCard({ icon: Icon, label, value, sub, color = 'blue' }) {
 }
 
 export default function AnalyticsPage() {
-  const a = mockAnalytics;
+  const vehicles = useFleetStore((s) => s.vehicles);
+  const missions = useMissionStore((s) => s.missions);
+  const alerts = useTelemetryStore((s) => s.alerts);
+  const telemetryByVehicle = useTelemetryStore((s) => s.vehicleTelemetry);
+  const connectionStatus = useTelemetryStore((s) => s.connectionStatus);
+
+  const metrics = useMemo(
+    () => buildLiveOpsMetrics({ vehicles, missions, alerts, telemetryByVehicle, connectionStatus }),
+    [vehicles, missions, alerts, telemetryByVehicle, connectionStatus]
+  );
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-100">Analytics Dashboard</h1>
-        <p className="text-sm text-slate-400 mt-1">Fleet performance metrics and operational insights</p>
+        <h1 className="text-2xl font-bold text-slate-100">Live Operations Analytics</h1>
+        <p className="text-sm text-slate-400 mt-1">Metrics derived from live vehicle, telemetry, and alert state</p>
       </div>
 
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <StatCard icon={Clock} label="Total Flight Hours" value={a.totalFlightHours.toLocaleString()} sub="All time" color="blue" />
-        <StatCard icon={Target} label="Total Missions" value={a.totalMissions} sub={`${a.successRate}% success rate`} color="green" />
-        <StatCard icon={TrendingUp} label="Avg Flight Time" value={`${a.avgFlightTime} min`} sub="Per mission" color="purple" />
-        <StatCard icon={AlertTriangle} label="Incidents" value={a.incidentsThisMonth} sub="This month" color="amber" />
+        <StatCard icon={Clock} label="Telemetry Samples" value={metrics.telemetrySampleCount} sub="Last 5 minutes" color="blue" />
+        <StatCard icon={Target} label="Total Missions" value={metrics.totalMissions} sub={`${metrics.activeMissions} active`} color="green" />
+        <StatCard icon={TrendingUp} label="Avg Battery" value={`${Math.round(metrics.averageBattery)}%`} sub="Current fleet average" color="purple" />
+        <StatCard icon={AlertTriangle} label="Critical Alerts" value={metrics.criticalAlerts} sub="Unacknowledged" color="amber" />
       </div>
 
       {/* Charts Row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
-          <CardHeader><CardTitle subtitle="Daily operational statistics">Flight Hours Trend</CardTitle></CardHeader>
+          <CardHeader><CardTitle subtitle="Telemetry sample volume across the last five minutes">Telemetry Throughput</CardTitle></CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={280}>
-              <AreaChart data={a.flightHoursHistory}>
+              <AreaChart data={metrics.telemetryThroughput}>
                 <defs>
                   <linearGradient id="gradHours" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
@@ -60,10 +71,10 @@ export default function AnalyticsPage() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={(v) => v.slice(5)} axisLine={{ stroke: '#334155' }} />
+                <XAxis dataKey="label" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={{ stroke: '#334155' }} />
                 <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={{ stroke: '#334155' }} />
                 <Tooltip contentStyle={chartTooltipStyle} />
-                <Area type="monotone" dataKey="hours" stroke="#3b82f6" fill="url(#gradHours)" strokeWidth={2} />
+                <Area type="monotone" dataKey="samples" stroke="#3b82f6" fill="url(#gradHours)" strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
           </CardContent>
@@ -74,8 +85,8 @@ export default function AnalyticsPage() {
           <CardContent>
             <ResponsiveContainer width="100%" height={280}>
               <PieChart>
-                <Pie data={a.statusDistribution} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={4} dataKey="value" nameKey="name">
-                  {a.statusDistribution.map((entry, i) => <Cell key={i} fill={entry.color} stroke="none" />)}
+                <Pie data={metrics.statusDistribution} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={4} dataKey="value" nameKey="name">
+                  {metrics.statusDistribution.map((entry, i) => <Cell key={i} fill={entry.color} stroke="none" />)}
                 </Pie>
                 <Tooltip contentStyle={chartTooltipStyle} />
                 <Legend wrapperStyle={{ fontSize: 12, color: '#94a3b8' }} />
@@ -87,34 +98,34 @@ export default function AnalyticsPage() {
 
       {/* Vehicle Utilization */}
       <Card>
-        <CardHeader><CardTitle subtitle="Hours and missions per vehicle">Vehicle Utilization</CardTitle></CardHeader>
+        <CardHeader><CardTitle subtitle="Battery, link quality, and sample counts per vehicle">Vehicle Snapshot</CardTitle></CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={a.vehicleUtilization}>
+            <BarChart data={metrics.batterySeries}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
               <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={{ stroke: '#334155' }} />
               <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={{ stroke: '#334155' }} />
               <Tooltip contentStyle={chartTooltipStyle} />
               <Legend wrapperStyle={{ fontSize: 12, color: '#94a3b8' }} />
-              <Bar dataKey="hours" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Flight Hours" />
-              <Bar dataKey="missions" fill="#8b5cf6" radius={[4, 4, 0, 0]} name="Missions" />
+              <Bar dataKey="battery" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Battery %" />
+              <Bar dataKey="samples" fill="#8b5cf6" radius={[4, 4, 0, 0]} name="Telemetry Samples" />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>
       </Card>
 
-      {/* Missions per Day */}
+      {/* Connection state */}
       <Card>
-        <CardHeader><CardTitle subtitle="Missions completed daily">Daily Mission Count</CardTitle></CardHeader>
+        <CardHeader><CardTitle subtitle="WebSocket and vehicle link states">Connection Status</CardTitle></CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={a.flightHoursHistory}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={(v) => v.slice(5)} axisLine={{ stroke: '#334155' }} />
-              <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={{ stroke: '#334155' }} />
+            <PieChart>
+              <Pie data={metrics.connectionDistribution} cx="50%" cy="50%" innerRadius={55} outerRadius={95} paddingAngle={4} dataKey="value" nameKey="name">
+                {metrics.connectionDistribution.map((entry, i) => <Cell key={i} fill={entry.color} stroke="none" />)}
+              </Pie>
               <Tooltip contentStyle={chartTooltipStyle} />
-              <Line type="monotone" dataKey="missions" stroke="#22c55e" strokeWidth={2} dot={false} />
-            </LineChart>
+              <Legend wrapperStyle={{ fontSize: 12, color: '#94a3b8' }} />
+            </PieChart>
           </ResponsiveContainer>
         </CardContent>
       </Card>

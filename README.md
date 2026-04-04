@@ -6,7 +6,7 @@
 
 ## What it does
 
-- **Real-time telemetry** — Sensor data (GPS, altitude, speed, attitude, battery, etc.) flows from each drone's Pixhawk flight controller over MAVLink to a Raspberry Pi, which publishes it via MQTT to the cloud backend. The backend validates, stores, caches, and broadcasts the data over WebSocket to all connected clients in real time.
+- **Real-time telemetry** — Sensor data (GPS, altitude, speed, attitude, battery, battery temperature, etc.) flows from each drone's Pixhawk flight controller over MAVLink to a Raspberry Pi, which publishes it via MQTT to the cloud backend. The backend validates, stores, caches, and broadcasts the data over WebSocket to all connected clients in real time.
 - **Fleet management** — Register, organize, and monitor all your drones and robots. Group vehicles into fleets, assign users to fleets, and view live status for every vehicle.
 - **Mission planning** — Create waypoint-based missions with a visual planner (map-based), assign missions to vehicles, upload them, and track execution status live.
 - **Command & control** — Send commands to vehicles in real time (arm, disarm, takeoff, land, RTL, emergency stop, etc.) from the dashboard or mobile app. Commands are routed through MQTT to the edge agent, which translates them into MAVLink instructions for the Pixhawk.
@@ -14,7 +14,7 @@
 - **Analytics** — Historical telemetry charts, flight hours, mission statistics, and incident reports.
 - **Multi-tenant & role-based access** — Organizations, role-based permissions (Super Admin, Admin, Operator, Pilot, Viewer), and user management built in.
 - **Mobile app** — A Flutter (Android/iOS) companion app with the same telemetry, fleet, mission, alert, and command features.
-- **Edge agent** — A lightweight Python agent that runs on a Raspberry Pi (including Pi Zero), reads MAVLink from a Pixhawk, and bridges everything to the cloud over MQTT.
+- **Edge agent** — A lightweight Python agent that runs on a Raspberry Pi (including Pi Zero), reads MAVLink from a Pixhawk, and bridges telemetry, heartbeat, and mission upload/download traffic to the cloud over MQTT.
 
 ---
 
@@ -109,9 +109,10 @@ scripts/           PowerShell helper scripts for dev
 ### Edge Agent (`edge-agent/`)
 
 - Reads MAVLink messages from Pixhawk (HEARTBEAT, ATTITUDE, GPS_RAW_INT, GLOBAL_POSITION_INT, SYS_STATUS, BATTERY_STATUS)
-- Converts to structured `TelemetryFrame` JSON
-- Publishes to MQTT at configurable rate
-- Receives commands from MQTT and sends ACKs
+- Converts to structured `TelemetryFrame` JSON, including GPS, attitude, battery, and battery temperature when available
+- Publishes telemetry and heartbeat to MQTT at configurable rates
+- Bridges mission upload and mission download between MQTT and MAVLink
+- Receives command requests from MQTT and currently acknowledges them; full MAVLink command execution is still a work item
 - Runs as a systemd service on Raspberry Pi
 
 ### Simulators (`testMQTT/`)
@@ -180,16 +181,42 @@ Dashboard will be at http://localhost:5173.
 
 ## Connecting a real drone
 
-See `PI_ZERO_SETUP_GUIDE.txt` in the repo root for a complete step-by-step guide covering hardware wiring, Pixhawk configuration, Pi Zero setup, and edge agent deployment.
+Use this flow for a Pixhawk + Raspberry Pi Zero setup:
 
-**Summary:**
+1. Configure Pixhawk TELEM2 for MAVLink2 at 57600 baud in Mission Planner or QGroundControl.
+2. Wire Pixhawk TELEM2 TX, RX, and GND to the Pi UART (`/dev/serial0` on Raspberry Pi OS).
+3. Install the shared package and edge agent from the repo root:
 
-1. Configure Pixhawk TELEM2 for MAVLink2 at 57600 baud (via Mission Planner)
-2. Wire Pixhawk TELEM2 TX/RX/GND to Raspberry Pi GPIO
-3. Install the edge agent on the Pi (`pip install -e ./shared_python && pip install -e ./edge-agent`)
-4. Create a vehicle in the dashboard, copy the Vehicle ID and Org ID
-5. Configure the edge agent with those IDs and your MQTT broker address
-6. Start the edge agent — telemetry flows automatically to the dashboard
+```bash
+cd shared_python
+sudo python3 -m pip install -e . --break-system-packages
+cd ../edge-agent
+sudo python3 -m pip install -e . --break-system-packages
+```
+
+4. Create a vehicle in the dashboard and copy the Vehicle UUID and Organization ID.
+5. Put those values into the edge agent env file and point it at your MQTT broker:
+
+```bash
+ORG_ID=<your org UUID>
+VEHICLE_ID=<your vehicle UUID>
+MAVLINK_CONNECTION=/dev/serial0
+MAVLINK_BAUD=57600
+MQTT_HOST=<your server IP or domain>
+MQTT_PORT=1883
+MQTT_USERNAME=
+MQTT_PASSWORD=
+TELEMETRY_HZ=2
+HEARTBEAT_HZ=1
+```
+
+6. Start the edge agent and confirm the vehicle goes online in Fleet Management.
+7. Verify live GPS, heading, altitude, satellites, voltage, current, and battery temperature in the vehicle detail page.
+
+**Notes:**
+
+- Telemetry and mission upload/download are implemented.
+- Command dispatch is still acknowledged by the edge agent but not yet translated into real Pixhawk control commands.
 
 **Test without hardware** using the drone simulator:
 
@@ -198,6 +225,12 @@ set AEROCOMMAND_ENABLED=true
 set AEROCOMMAND_ORG_ID=<your org UUID>
 set AEROCOMMAND_VEHICLE_ID=<your vehicle UUID>
 python testMQTT/drone_simulator.py
+```
+
+For Windows, use the helper script:
+
+```powershell
+./scripts/start-drone-sim.ps1 -OrgId <your org UUID> -VehicleId <your vehicle UUID>
 ```
 
 ---

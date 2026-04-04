@@ -19,6 +19,11 @@ export default defineConfig({
     host: true,
     port: 3000,
     proxy: {
+      '/health': {
+        target: process.env.VITE_PROXY_TARGET || 'http://localhost:8000',
+        changeOrigin: true,
+        ws: false,
+      },
       '/api': {
         target: process.env.VITE_PROXY_TARGET || 'http://localhost:8000',
         changeOrigin: true,

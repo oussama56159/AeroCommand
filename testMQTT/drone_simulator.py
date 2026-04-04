@@ -53,6 +53,7 @@ class DroneConfig:
 class DroneSimulator:
     def __init__(self, config: DroneConfig) -> None:
         self.cfg = config
+        self._default_target_alt = config.target_alt
         self.client = mqtt.Client(client_id=self.cfg.client_id)
         if self.cfg.mqtt_username:
             self.client.username_pw_set(self.cfg.mqtt_username, self.cfg.mqtt_password)
@@ -85,6 +86,24 @@ class DroneSimulator:
         self._seq = 0
 
         self._loss_until = 0.0
+        self._reset_cycle_state()
+
+    def _reset_cycle_state(self) -> None:
+        self.armed = False
+        self.mode = "IDLE"
+        self.status = "idle"
+        self.mission_active = False
+
+        self.lat = self.cfg.home_lat
+        self.lng = self.cfg.home_lng
+        self.alt = self.cfg.home_alt
+        self.heading = 90.0
+        self.roll = 0.0
+        self.pitch = 0.0
+        self.yaw = 90.0
+        self.speed = 0.0
+        self.vertical_speed = 0.0
+        self.cfg.target_alt = self._default_target_alt
 
     def _on_connect(self, client, userdata, flags, rc):
         self.connected = True
@@ -105,9 +124,7 @@ class DroneSimulator:
         if command in ("arm", "disarm"):
             self.armed = command == "arm"
             if not self.armed:
-                self.mode = "IDLE"
-                self.status = "idle"
-                self.mission_active = False
+                self._reset_cycle_state()
         elif command == "takeoff" and self.armed:
             self.mode = "GUIDED"
             self.status = "flying"
@@ -171,14 +188,17 @@ class DroneSimulator:
             self.status = "idle"
             return
 
+        if self.mode == "IDLE":
+            self.speed = 0.0
+            self.vertical_speed = 0.0
+            self.status = "idle"
+            return
+
         if self.mode == "LAND":
             self.vertical_speed = -1.5
             self.alt = max(0.0, self.alt + self.vertical_speed * dt)
             if self.alt <= 1.0:
-                self.status = "idle"
-                self.mode = "IDLE"
-                self.armed = False
-                self.speed = 0.0
+                self._reset_cycle_state()
             return
 
         if self.mode == "RTL":

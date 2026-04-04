@@ -1,26 +1,33 @@
+import { lazy, Suspense } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
 import ProtectedRoute, { PublicRoute } from '@/components/shared/ProtectedRoute';
 import { ROLES } from '@/config/constants';
+import { PageLoader } from '@/components/ui/Spinner';
 
-// Pages (lazy imports for code splitting)
-import LoginPage from '@/pages/auth/LoginPage';
-import RegisterPage from '@/pages/auth/RegisterPage';
-import PasswordRecoveryRequestPage from '@/pages/auth/PasswordRecoveryRequestPage';
-import DashboardPage from '@/pages/dashboard/DashboardPage';
-import FleetPage from '@/pages/fleet/FleetPage';
-import VehicleDetailPage from '@/pages/fleet/VehicleDetailPage';
-import TelemetryPage from '@/pages/telemetry/TelemetryPage';
-import CameraPage from '@/pages/camera/CameraPage';
-import LiveMapPage from '@/pages/map/LiveMapPage';
-import MissionPlannerPage from '@/pages/missions/MissionPlannerPage';
-import ControlPanelPage from '@/pages/control/ControlPanelPage';
-import AlertsPage from '@/pages/alerts/AlertsPage';
-import AnalyticsPage from '@/pages/analytics/AnalyticsPage';
-import UsersPage from '@/pages/users/UsersPage';
-import AdminPage from '@/pages/admin/AdminPage';
-import SettingsPage from '@/pages/settings/SettingsPage';
-import MarketingLandingPage from '@/pages/marketing/MarketingLandingPage';
+// Pages (actual lazy imports for code splitting)
+const LoginPage = lazy(() => import('@/pages/auth/LoginPage'));
+const RegisterPage = lazy(() => import('@/pages/auth/RegisterPage'));
+const PasswordRecoveryRequestPage = lazy(() => import('@/pages/auth/PasswordRecoveryRequestPage'));
+const DashboardPage = lazy(() => import('@/pages/dashboard/DashboardPage'));
+const FleetPage = lazy(() => import('@/pages/fleet/FleetPage'));
+const VehicleDetailPage = lazy(() => import('@/pages/fleet/VehicleDetailPage'));
+const TelemetryPage = lazy(() => import('@/pages/telemetry/TelemetryPage'));
+const CameraPage = lazy(() => import('@/pages/camera/CameraPage'));
+const LiveMapPage = lazy(() => import('@/pages/map/LiveMapPage'));
+const DroneSimulation3DPage = lazy(() => import('@/pages/simulation/DroneSimulation3DPage'));
+const MissionPlannerPage = lazy(() => import('@/pages/missions/MissionPlannerPage'));
+const ControlPanelPage = lazy(() => import('@/pages/control/ControlPanelPage'));
+const AlertsPage = lazy(() => import('@/pages/alerts/AlertsPage'));
+const AnalyticsPage = lazy(() => import('@/pages/analytics/AnalyticsPage'));
+const UsersPage = lazy(() => import('@/pages/users/UsersPage'));
+const AdminPage = lazy(() => import('@/pages/admin/AdminPage'));
+const SettingsPage = lazy(() => import('@/pages/settings/SettingsPage'));
+const MarketingLandingPage = lazy(() => import('@/pages/marketing/MarketingLandingPage'));
+
+function PublicPage({ children }) {
+  return <Suspense fallback={<PageLoader />}>{children}</Suspense>;
+}
 
 function PublicNotFoundPage() {
   return (
@@ -62,10 +69,10 @@ export default function App() {
   return (
     <Routes>
       {/* Public Routes */}
-      <Route path="/" element={<PublicRoute><MarketingLandingPage /></PublicRoute>} />
-      <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
-      <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
-      <Route path="/password-recovery" element={<PublicRoute><PasswordRecoveryRequestPage /></PublicRoute>} />
+      <Route path="/" element={<PublicRoute><PublicPage><MarketingLandingPage /></PublicPage></PublicRoute>} />
+      <Route path="/login" element={<PublicRoute><PublicPage><LoginPage /></PublicPage></PublicRoute>} />
+      <Route path="/register" element={<PublicRoute><PublicPage><RegisterPage /></PublicPage></PublicRoute>} />
+      <Route path="/password-recovery" element={<PublicRoute><PublicPage><PasswordRecoveryRequestPage /></PublicPage></PublicRoute>} />
 
       {/* Protected Routes — wrapped in MainLayout */}
       <Route path="/app" element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
@@ -75,6 +82,7 @@ export default function App() {
         <Route path="telemetry" element={<TelemetryPage />} />
         <Route path="camera" element={<CameraPage />} />
         <Route path="map" element={<LiveMapPage />} />
+        <Route path="simulation-3d" element={<DroneSimulation3DPage />} />
         <Route path="missions" element={
           <ProtectedRoute requiredRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.PILOT, ROLES.OPERATOR]}>
             <MissionPlannerPage />

@@ -4,6 +4,7 @@ import {
   Trash2,
   GripVertical,
   Upload,
+  Download,
   Save,
   RotateCcw,
   Copy,
@@ -464,6 +465,10 @@ export default function MissionPlannerPage() {
   const [readinessSummary, setReadinessSummary] = useState({ ready: 0, total: 0, blockers: 0, warnings: 0 });
   const [missionStartError, setMissionStartError] = useState('');
   const [isStartingMission, setIsStartingMission] = useState(false);
+  const [missionUploadError, setMissionUploadError] = useState('');
+  const [isUploadingMission, setIsUploadingMission] = useState(false);
+  const [missionDownloadError, setMissionDownloadError] = useState('');
+  const [isDownloadingMission, setIsDownloadingMission] = useState(false);
 
   useEffect(() => {
     fetchMissions();
@@ -656,6 +661,61 @@ export default function MissionPlannerPage() {
       launch_policy: launchPolicy,
       grid_config: gridParams,
     });
+  };
+
+  const handleUploadMission = async () => {
+    setMissionUploadError('');
+    if (!selectedMissionId) {
+      setMissionUploadError('Load a mission first to upload it to vehicles.');
+      return;
+    }
+    if (launchVehicles.length === 0) {
+      setMissionUploadError('No drones selected. Choose a fleet or assign drones to this mission.');
+      return;
+    }
+    if (waypoints.length === 0) {
+      setMissionUploadError('No waypoints to upload.');
+      return;
+    }
+
+    setIsUploadingMission(true);
+    try {
+      const results = await Promise.allSettled(launchVehicles.map((v) => missionAPI.upload(v.id, selectedMissionId)));
+      const failed = results.filter((r) => r.status === 'rejected').length;
+      if (failed > 0) {
+        setMissionUploadError(`${failed} mission upload(s) failed. Check edge agent connectivity and MQTT.`);
+      }
+      await fetchMissions();
+      await fetchMission(selectedMissionId);
+    } finally {
+      setIsUploadingMission(false);
+    }
+  };
+
+  const handleDownloadMission = async () => {
+    setMissionDownloadError('');
+    if (launchVehicles.length === 0) {
+      setMissionDownloadError('No drone selected. Choose a fleet or assign a drone to download from.');
+      return;
+    }
+    if (launchVehicles.length !== 1) {
+      setMissionDownloadError('Select exactly one vehicle to download its mission.');
+      return;
+    }
+
+    setIsDownloadingMission(true);
+    try {
+      const vehicle = launchVehicles[0];
+      const { data } = await missionAPI.download(vehicle.id);
+      await fetchMissions();
+      selectMission(data.id);
+      const mission = await fetchMission(data.id);
+      hydrateMissionPlanningState(mission);
+    } catch (err) {
+      setMissionDownloadError(err?.response?.data?.detail || err?.message || 'Mission download failed');
+    } finally {
+      setIsDownloadingMission(false);
+    }
   };
 
   const handleSelectMission = async (missionId) => {
@@ -1042,14 +1102,40 @@ export default function MissionPlannerPage() {
               >
                 Save
               </ActionButton>
-              <ActionButton actionId="mission.upload" size="xs" icon={Upload} onAction={() => {}} disabled={waypoints.length === 0} disabledReason="No waypoints to upload">
+              <ActionButton
+                actionId="mission.upload"
+                size="xs"
+                icon={Upload}
+                loading={isUploadingMission}
+                onAction={handleUploadMission}
+                disabled={!selectedMissionId || waypoints.length === 0 || launchVehicles.length === 0 || isUploadingMission}
+                disabledReason={!selectedMissionId ? 'Load a mission first' : launchVehicles.length === 0 ? 'Assign a vehicle or select a fleet' : waypoints.length === 0 ? 'No waypoints to upload' : isUploadingMission ? 'Uploading...' : undefined}
+              >
                 Upload
+              </ActionButton>
+              <ActionButton
+                actionId="mission.download"
+                size="xs"
+                variant="secondary"
+                icon={Download}
+                loading={isDownloadingMission}
+                onAction={handleDownloadMission}
+                disabled={launchVehicles.length !== 1 || isDownloadingMission}
+                disabledReason={launchVehicles.length === 0 ? 'Select a vehicle first' : launchVehicles.length !== 1 ? 'Select exactly one vehicle' : isDownloadingMission ? 'Downloading...' : undefined}
+              >
+                Download
               </ActionButton>
             </div>
           }>
             <CardTitle subtitle={`${waypoints.length} waypoints defined`}>Waypoint Editor</CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
+            {missionUploadError && (
+              <div className="rounded-lg border border-red-600/30 bg-red-600/10 px-3 py-2 text-sm text-red-300">{missionUploadError}</div>
+            )}
+            {missionDownloadError && (
+              <div className="rounded-lg border border-red-600/30 bg-red-600/10 px-3 py-2 text-sm text-red-300">{missionDownloadError}</div>
+            )}
             <div className="rounded-xl overflow-hidden border border-slate-700">
               <div className="h-[430px]">
                 <MapContainer

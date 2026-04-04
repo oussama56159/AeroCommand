@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ChevronLeft, Battery, Compass, Gauge, Satellite, Thermometer, Radio } from 'lucide-react';
+import { ChevronLeft, Battery, Compass, Gauge, Satellite, Thermometer, Zap } from 'lucide-react';
 import Card, { CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
 import StatusIndicator from '@/components/ui/StatusIndicator';
@@ -52,6 +52,8 @@ export default function VehicleDetailPage() {
   const t = telemetry || {};
   const isConnected = connStatus === 'connected';
   const disabledReason = isConnected ? undefined : 'Vehicle not connected';
+  const batteryTemperature = Number(t.temperature);
+  const hasBatteryTemperature = Number.isFinite(batteryTemperature);
 
   const handleCommand = async (cmd) => {
     await sendCommand(vehicle.id, { command: cmd });
@@ -78,6 +80,25 @@ export default function VehicleDetailPage() {
           <p className="text-sm text-slate-400">{vehicle.callsign} • {vehicle.type} • {vehicle.firmware}</p>
         </div>
       </div>
+
+      {/* Identifiers */}
+      <Card>
+        <CardHeader>
+          <CardTitle subtitle="Backend identifiers used for telemetry, commands, and org scoping">Vehicle Identifiers</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-3">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Vehicle UUID</p>
+              <p className="mt-1 break-all font-mono text-sm text-slate-100">{vehicle.id}</p>
+            </div>
+            <div className="rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-3">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Organization ID</p>
+              <p className="mt-1 break-all font-mono text-sm text-slate-100">{vehicle.organization_id || '—'}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Quick Commands */}
       <Card>
@@ -181,7 +202,8 @@ export default function VehicleDetailPage() {
         <TelemetryGauge icon={Gauge} label="Climb Rate" value={(t.climb_rate ?? 0).toFixed(1)} unit="m/s" color="green" />
         <TelemetryGauge icon={Satellite} label="Satellites" value={t.satellites ?? 0} unit="sats" color="blue" />
         <TelemetryGauge icon={Battery} label="Voltage" value={(t.voltage ?? 0).toFixed(1)} unit="V" color="amber" />
-        <TelemetryGauge icon={Thermometer} label="Current" value={(t.current ?? 0).toFixed(1)} unit="A" color="red" />
+        <TelemetryGauge icon={Thermometer} label="Battery Temp" value={hasBatteryTemperature ? batteryTemperature.toFixed(1) : '—'} unit="°C" color="red" />
+        <TelemetryGauge icon={Zap} label="Current" value={(t.current ?? 0).toFixed(1)} unit="A" color="red" />
         <TelemetryGauge icon={Gauge} label="Throttle" value={Math.round(t.throttle ?? 0)} unit="%" color="purple" />
         <TelemetryGauge icon={Compass} label="Roll" value={(t.roll ?? 0).toFixed(1)} unit="°" color="cyan" />
         <TelemetryGauge icon={Compass} label="Pitch" value={(t.pitch ?? 0).toFixed(1)} unit="°" color="cyan" />

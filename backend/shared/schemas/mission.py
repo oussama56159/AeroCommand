@@ -7,6 +7,38 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+
+WAYPOINT_COMMAND_TO_MAV_CMD: dict[str, int] = {
+    "NAV_WAYPOINT": 16,
+    "NAV_LOITER_UNLIM": 17,
+    "NAV_LOITER_TIME": 19,
+    "NAV_RETURN_TO_LAUNCH": 20,
+    "NAV_LAND": 21,
+    "NAV_TAKEOFF": 22,
+    "NAV_SPLINE_WAYPOINT": 82,
+    "DO_CHANGE_SPEED": 178,
+    "DO_SET_SERVO": 183,
+    "DO_SET_ROI": 201,
+    "DO_SET_CAM_TRIGG_DIST": 206,
+}
+
+
+MAV_CMD_TO_WAYPOINT_COMMAND: dict[int, str] = {v: k for k, v in WAYPOINT_COMMAND_TO_MAV_CMD.items()}
+
+
+def waypoint_command_to_mav_cmd(command: "WaypointCommand | str") -> int:
+    raw = command.value if isinstance(command, WaypointCommand) else str(command)
+    if raw not in WAYPOINT_COMMAND_TO_MAV_CMD:
+        raise ValueError(f"Unsupported WaypointCommand '{raw}'")
+    return WAYPOINT_COMMAND_TO_MAV_CMD[raw]
+
+
+def mav_cmd_to_waypoint_command(command_id: int) -> "WaypointCommand":
+    raw = MAV_CMD_TO_WAYPOINT_COMMAND.get(int(command_id))
+    if raw is None:
+        raise ValueError(f"Unsupported MAV_CMD '{command_id}'")
+    return WaypointCommand(raw)
+
 __all__ = [
     "MissionStatus",
     "WaypointCommand",
@@ -16,11 +48,14 @@ __all__ = [
     "MissionUpdate",
     "MissionResponse",
     "MissionUploadRequest",
+    "MissionDownloadRequest",
     "MissionAssignRequest",
     "MissionUnassignRequest",
     "MissionAssignmentResponse",
     "MissionStatusUpdateRequest",
     "MissionProgressEvent",
+    "MissionDownloadRequestEvent",
+    "MissionDownloadResponseEvent",
     "MissionUploadEvent",
     "MissionStatusEvent",
 ]
@@ -116,6 +151,11 @@ class MissionUploadRequest(BaseModel):
     mission_id: UUID
 
 
+class MissionDownloadRequest(BaseModel):
+    vehicle_id: UUID
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+
+
 class MissionAssignRequest(BaseModel):
     vehicle_ids: list[UUID] = Field(min_length=1)
     replace_existing: bool = True
@@ -183,5 +223,26 @@ class MissionStatusEvent(BaseModel):
     message: str | None = None
     progress: float | None = Field(default=None, ge=0, le=100)
     current_waypoint: int | None = None
+    timestamp: datetime
+
+
+class MissionDownloadRequestEvent(BaseModel):
+    """Published to MQTT: aerocommand/{org}/mission/{vehicle_id}/download/request"""
+
+    request_id: str
+    org_id: str
+    vehicle_id: str
+    timestamp: datetime
+
+
+class MissionDownloadResponseEvent(BaseModel):
+    """Published to MQTT: aerocommand/{org}/mission/{vehicle_id}/download/response"""
+
+    request_id: str
+    org_id: str
+    vehicle_id: str
+    ok: bool
+    message: str | None = None
+    waypoints: list[WaypointCreate] = Field(default_factory=list)
     timestamp: datetime
 

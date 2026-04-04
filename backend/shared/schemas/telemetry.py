@@ -106,6 +106,7 @@ class TelemetrySnapshot(BaseModel):
     heading: float
     groundspeed: float
     battery: float
+    temperature: float | None = None
     mode: str
     armed: bool
     satellites: int

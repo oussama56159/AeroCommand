@@ -3,8 +3,14 @@ from __future__ import annotations
 import asyncio
 import math
 
+import orjson
+
+from backend.shared.schemas.mission import MissionDownloadRequestEvent, MissionUploadEvent
+
 from .config import get_settings
 from .mavlink_reader import MavlinkReader
+from .mission_downloader import download_mission_from_autopilot
+from .mission_uploader import upload_mission_event_to_autopilot
 from .mqtt_bridge import MqttBridge
 from .telemetry_state import TelemetryState
 
@@ -19,6 +25,8 @@ async def _mavlink_loop(reader: MavlinkReader, state: TelemetryState) -> None:
         msg = await asyncio.to_thread(reader.recv, 1.0)
         if msg is None:
             continue
+
+        reader.notify(msg)
 
         if msg.name == "HEARTBEAT":
             base_mode = int(msg.data.get("base_mode", 0))
@@ -68,6 +76,10 @@ async def _mavlink_loop(reader: MavlinkReader, state: TelemetryState) -> None:
                 state.battery.current = float(msg.data.get("current_battery", 0)) / 100.0
             if "battery_remaining" in msg.data:
                 state.battery.remaining = float(msg.data.get("battery_remaining", 0))
+            if "temperature" in msg.data:
+                raw_temperature = float(msg.data.get("temperature", 0))
+                if raw_temperature not in (-32768, 32767):
+                    state.battery.temperature = raw_temperature / 100.0
 
 
 async def _run() -> None:
@@ -93,12 +105,28 @@ async def _run() -> None:
     telemetry_interval_s = 1.0 / settings.TELEMETRY_HZ
     heartbeat_interval_s = 1.0 / settings.HEARTBEAT_HZ
 
+    async def on_mission_upload(payload: bytes, publish_json) -> None:
+        data = orjson.loads(payload)
+        event = MissionUploadEvent.model_validate(data)
+        await upload_mission_event_to_autopilot(reader=reader, event=event, publish_json=publish_json)
+
+    async def on_mission_download_request(payload: bytes, publish_json) -> None:
+        data = orjson.loads(payload)
+        event = MissionDownloadRequestEvent.model_validate(data)
+
+        async def _handle() -> None:
+            await download_mission_from_autopilot(reader=reader, event=event, publish_json=publish_json)
+
+        asyncio.create_task(_handle())
+
     await asyncio.gather(
         _mavlink_loop(reader, telemetry_state),
         bridge.run(
             telemetry_state=telemetry_state,
             telemetry_interval_s=telemetry_interval_s,
             heartbeat_interval_s=heartbeat_interval_s,
+            on_mission_upload=on_mission_upload,
+            on_mission_download_request=on_mission_download_request,
         ),
     )
 

@@ -64,6 +64,7 @@ async def dispatch_command(
     db.add(record)
     await db.flush()
     await db.refresh(record)
+    issued_at = record.issued_at or datetime.now(timezone.utc)
 
     # Build MAVLink command payload
     mavlink_cmd = _build_mavlink_command(data)
@@ -97,7 +98,7 @@ async def dispatch_command(
             "status": CommandStatus.SENT.value,
             "vehicle_id": str(data.vehicle_id),
             "command": data.command.value,
-            "issued_at": record.issued_at.isoformat(),
+            "issued_at": issued_at.isoformat(),
         })
         await redis.expire(RedisKeys.command(str(record.id)), data.timeout_seconds + 60)
     except RuntimeError:

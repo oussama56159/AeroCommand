@@ -4,6 +4,7 @@ from __future__ import annotations
 import enum
 from datetime import datetime
 from uuid import UUID
+from typing import ClassVar
 
 from pydantic import BaseModel, Field
 
@@ -104,7 +105,7 @@ class MAVLinkCommand(BaseModel):
     confirmation: int = 0
 
     # Mapping from CommandType to MAV_CMD
-    COMMAND_MAP: dict[str, int] = {
+    COMMAND_MAP: ClassVar[dict[str, int]] = {
         "arm": 400,           # MAV_CMD_COMPONENT_ARM_DISARM
         "disarm": 400,
         "takeoff": 22,        # MAV_CMD_NAV_TAKEOFF

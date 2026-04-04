@@ -17,6 +17,8 @@ Topic Hierarchy:
     │   │   └── {vehicle_id}/response     # Command result edge → cloud
     │   ├── mission/
     │   │   ├── {vehicle_id}/upload       # Mission upload cloud → edge
+    │   │   ├── {vehicle_id}/download/request   # Mission download request cloud → edge
+    │   │   ├── {vehicle_id}/download/response  # Mission download response edge → cloud
     │   │   ├── {vehicle_id}/progress     # Mission progress edge → cloud
     │   │   └── {vehicle_id}/status       # Mission status changes
     │   ├── alert/
@@ -67,6 +69,14 @@ class MQTTTopics:
     @staticmethod
     def mission_upload(org_id: str, vehicle_id: str) -> str:
         return f"aerocommand/{org_id}/mission/{vehicle_id}/upload"
+
+    @staticmethod
+    def mission_download_request(org_id: str, vehicle_id: str) -> str:
+        return f"aerocommand/{org_id}/mission/{vehicle_id}/download/request"
+
+    @staticmethod
+    def mission_download_response(org_id: str, vehicle_id: str) -> str:
+        return f"aerocommand/{org_id}/mission/{vehicle_id}/download/response"
 
     @staticmethod
     def mission_progress(org_id: str, vehicle_id: str) -> str:

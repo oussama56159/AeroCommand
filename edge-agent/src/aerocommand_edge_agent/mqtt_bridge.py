@@ -41,6 +41,12 @@ class MqttBridge:
         self.command_request_topic = MQTTTopics.command_request(org_id, vehicle_id)
         self.command_ack_topic = MQTTTopics.command_ack(org_id, vehicle_id)
 
+        self.mission_upload_topic = MQTTTopics.mission_upload(org_id, vehicle_id)
+        self.mission_download_request_topic = MQTTTopics.mission_download_request(org_id, vehicle_id)
+        self.mission_download_response_topic = MQTTTopics.mission_download_response(org_id, vehicle_id)
+        self.mission_status_topic = MQTTTopics.mission_status(org_id, vehicle_id)
+        self.mission_progress_topic = MQTTTopics.mission_progress(org_id, vehicle_id)
+
     async def run(
         self,
         *,
@@ -48,6 +54,8 @@ class MqttBridge:
         telemetry_interval_s: float,
         heartbeat_interval_s: float,
         on_command_request: callable | None = None,
+        on_mission_upload: callable | None = None,
+        on_mission_download_request: callable | None = None,
     ) -> None:
         async with Client(
             hostname=self.host,
@@ -58,6 +66,11 @@ class MqttBridge:
             keepalive=self.keepalive,
         ) as client:
             await client.subscribe(self.command_request_topic, qos=self.qos)
+            await client.subscribe(self.mission_upload_topic, qos=self.qos)
+            await client.subscribe(self.mission_download_request_topic, qos=self.qos)
+
+            async def publish_json(topic: str, payload: dict) -> None:
+                await client.publish(topic, orjson.dumps(payload), qos=self.qos)
 
             async def publish_telemetry() -> None:
                 while True:
@@ -78,28 +91,47 @@ class MqttBridge:
                     await client.publish(self.heartbeat_topic, payload, qos=self.qos)
                     await asyncio.sleep(heartbeat_interval_s)
 
-            async def handle_commands() -> None:
+            async def handle_messages() -> None:
                 async for message in client.messages:
-                    if message.topic.value != self.command_request_topic:
+                    topic = message.topic.value
+
+                    if topic == self.command_request_topic:
+                        # Initial stub: ACK immediately. A full implementation would translate
+                        # the request into MAVLink COMMAND_LONG/MISSION* messages.
+                        ack = CommandAck(
+                            command_id="unknown",
+                            vehicle_id=self.vehicle_id,
+                            status=CommandStatus.ACKNOWLEDGED,
+                            result_code=0,
+                            message="Received by edge agent",
+                            timestamp=datetime.now(tz=timezone.utc),
+                        )
+                        await client.publish(self.command_ack_topic, orjson.dumps(ack.model_dump(mode="json")), qos=self.qos)
+
+                        if on_command_request is not None:
+                            try:
+                                await on_command_request(message)
+                            except Exception:
+                                # swallow errors so we keep the bridge alive
+                                pass
                         continue
 
-                    # Initial stub: ACK immediately. A full implementation would translate
-                    # the request into MAVLink COMMAND_LONG/MISSION* messages.
-                    ack = CommandAck(
-                        command_id="unknown",
-                        vehicle_id=self.vehicle_id,
-                        status=CommandStatus.ACKNOWLEDGED,
-                        result_code=0,
-                        message="Received by edge agent",
-                        timestamp=datetime.now(tz=timezone.utc),
-                    )
-                    await client.publish(self.command_ack_topic, orjson.dumps(ack.model_dump(mode="json")), qos=self.qos)
+                    if topic == self.mission_upload_topic:
+                        if on_mission_upload is not None:
+                            try:
+                                await on_mission_upload(message.payload, publish_json)
+                            except Exception:
+                                # swallow errors so we keep the bridge alive
+                                pass
+                        continue
 
-                    if on_command_request is not None:
-                        try:
-                            await on_command_request(message)
-                        except Exception:
-                            # swallow errors so we keep the bridge alive
-                            pass
+                    if topic == self.mission_download_request_topic:
+                        if on_mission_download_request is not None:
+                            try:
+                                await on_mission_download_request(message.payload, publish_json)
+                            except Exception:
+                                # swallow errors so we keep the bridge alive
+                                pass
+                        continue
 
-            await asyncio.gather(publish_telemetry(), publish_heartbeat(), handle_commands())
+            await asyncio.gather(publish_telemetry(), publish_heartbeat(), handle_messages())

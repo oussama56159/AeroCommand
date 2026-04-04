@@ -11,6 +11,54 @@ const isMockMode = () => {
   return import.meta.env.VITE_MOCK_MODE === 'true';
 };
 
+function getTelemetryPosition(telemetry) {
+  const position = telemetry?.position || telemetry?.gps || {};
+  return {
+    lat: position.lat ?? position.latitude ?? null,
+    lng: position.lng ?? position.lon ?? position.longitude ?? null,
+    alt: position.alt ?? position.altitude ?? null,
+  };
+}
+
+function getTelemetryBattery(telemetry) {
+  if (typeof telemetry?.battery === 'number') return telemetry.battery;
+  if (typeof telemetry?.battery?.remaining === 'number') return telemetry.battery.remaining;
+  return null;
+}
+
+function getTelemetryStatus(telemetry) {
+  const rawStatus = String(telemetry?.status || telemetry?.mode || telemetry?.system?.mode || '').toLowerCase();
+  const armed = Boolean(telemetry?.armed ?? telemetry?.system?.armed ?? false);
+  const speed = Number(telemetry?.groundspeed ?? telemetry?.speed ?? telemetry?.airspeed ?? 0);
+  const altitude = Number(telemetry?.altitude ?? telemetry?.alt ?? telemetry?.position?.alt ?? telemetry?.gps?.alt ?? 0);
+
+  if (armed) {
+    if (rawStatus === 'landing' || rawStatus === 'land') return 'landing';
+    if (rawStatus === 'rtl' || rawStatus === 'returning') return 'online';
+    if (rawStatus === 'emergency') return 'emergency';
+    if (speed > 0.5 || altitude > 0.5 || rawStatus === 'guided' || rawStatus === 'auto' || rawStatus === 'mission') return 'in_flight';
+    return 'armed';
+  }
+
+  if (rawStatus === 'flying' || rawStatus === 'in_flight' || rawStatus === 'guided' || rawStatus === 'auto') return 'in_flight';
+  if (rawStatus === 'landing' || rawStatus === 'land') return 'landing';
+  if (rawStatus === 'emergency') return 'emergency';
+  if (rawStatus === 'maintenance' || rawStatus === 'charging') return rawStatus;
+  if (rawStatus === 'idle' || rawStatus === 'disarmed') return 'idle';
+  return 'online';
+}
+
+function updateFleetCounts(vehicles, fleets) {
+  return fleets.map((fleet) => {
+    const scopedVehicles = vehicles.filter((vehicle) => vehicle.fleet_id === fleet.id);
+    return {
+      ...fleet,
+      vehicle_count: scopedVehicles.length,
+      online_count: scopedVehicles.filter((vehicle) => vehicle.status !== 'offline').length,
+    };
+  });
+}
+
 export const useFleetStore = create((set, get) => ({
   vehicles: [],
   fleets: [],
@@ -109,6 +157,36 @@ export const useFleetStore = create((set, get) => ({
   getOnlineCount: () => get().vehicles.filter((v) => v.status !== 'offline').length,
 
   getVehiclesByFleet: (fleetId) => get().vehicles.filter((v) => v.fleet_id === fleetId),
+
+  syncVehicleTelemetry: (vehicleId, telemetry) => {
+    if (!vehicleId || !telemetry) return;
+
+    set((state) => {
+      const exists = state.vehicles.some((vehicle) => vehicle.id === vehicleId);
+      if (!exists) return state;
+
+      const position = getTelemetryPosition(telemetry);
+      const updatedVehicle = {
+        ...state.vehicles.find((vehicle) => vehicle.id === vehicleId),
+        status: getTelemetryStatus(telemetry),
+        battery: getTelemetryBattery(telemetry),
+        mode: telemetry?.mode || telemetry?.system?.mode || state.vehicles.find((vehicle) => vehicle.id === vehicleId)?.mode || null,
+        armed: Boolean(telemetry?.armed ?? telemetry?.system?.armed ?? false),
+        current_lat: position.lat,
+        current_lng: position.lng,
+        current_alt: position.alt,
+        position: position.lat != null && position.lng != null ? position : null,
+        last_seen: new Date().toISOString(),
+      };
+
+      const vehicles = state.vehicles.map((vehicle) => (vehicle.id === vehicleId ? updatedVehicle : vehicle));
+
+      return {
+        vehicles,
+        fleets: updateFleetCounts(vehicles, state.fleets),
+      };
+    });
+  },
 
   createFleet: async (fleetData) => {
     if (isMockMode()) {

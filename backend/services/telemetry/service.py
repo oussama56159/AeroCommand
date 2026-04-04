@@ -13,10 +13,11 @@ from uuid import UUID
 
 from backend.shared.database.mongo import get_mongo_db
 from backend.shared.database.redis import RedisKeys, get_redis
-from backend.shared.database.postgres import get_postgres_session
+from backend.shared.database.postgres import get_direct_postgres_session, get_postgres_session
 from backend.shared.schemas.telemetry import TelemetryFrame, TelemetrySnapshot
 
 from backend.services.fleet.models import Vehicle
+from backend.shared.schemas.vehicle import VehicleStatus
 from sqlalchemy import select
 
 from .websocket_manager import ws_manager
@@ -64,6 +65,7 @@ async def process_telemetry(vehicle_id: str, payload: dict) -> None:
     # Pipeline stages run concurrently
     import asyncio
     await asyncio.gather(
+        _sync_vehicle_state_from_frame(vehicle_id, frame),
         _store_in_mongodb(frame),
         _cache_in_redis(frame),
         _broadcast_via_websocket(vehicle_id, frame),
@@ -96,6 +98,7 @@ async def _cache_in_redis(frame: TelemetryFrame) -> None:
             heading=frame.heading,
             groundspeed=frame.groundspeed,
             battery=frame.battery.remaining,
+            temperature=frame.battery.temperature,
             mode=frame.system.mode,
             armed=frame.system.armed,
             satellites=frame.gps.satellites_visible,
@@ -123,6 +126,7 @@ async def _broadcast_via_websocket(vehicle_id: str, frame: TelemetryFrame) -> No
 async def process_heartbeat(vehicle_id: str, payload: dict) -> None:
     """Process heartbeat message – update vehicle online status."""
     try:
+        heartbeat_connected = bool(payload.get("connected", True))
         redis = get_redis()
         await redis.setex(
             RedisKeys.heartbeat(vehicle_id),
@@ -132,10 +136,76 @@ async def process_heartbeat(vehicle_id: str, payload: dict) -> None:
         await redis.setex(
             RedisKeys.vehicle_status(vehicle_id),
             60,
-            "online",
+            "online" if heartbeat_connected else "offline",
         )
+
+        if heartbeat_connected:
+            await _sync_vehicle_online_state(vehicle_id)
     except Exception as e:
         logger.error(f"Heartbeat processing failed for {vehicle_id}: {e}")
+
+
+async def _sync_vehicle_state_from_frame(vehicle_id: str, frame: TelemetryFrame) -> None:
+    """Persist live telemetry into the vehicle registry so fleet views stay current."""
+    try:
+        mode = frame.system.mode.upper()
+        armed = bool(frame.system.armed)
+        moving = frame.groundspeed > 0.5 or abs(frame.climb_rate) > 0.1 or frame.gps.alt > 0.5
+
+        if armed:
+            if mode == "LAND":
+                status = VehicleStatus.LANDING
+            elif mode == "RTL":
+                status = VehicleStatus.RETURNING
+            elif moving or mode in {"AUTO", "GUIDED", "MISSION", "OFFBOARD"}:
+                status = VehicleStatus.IN_FLIGHT
+            else:
+                status = VehicleStatus.ARMED
+        elif mode == "LAND":
+            status = VehicleStatus.LANDING
+        elif mode == "RTL":
+            status = VehicleStatus.RETURNING
+        else:
+            status = VehicleStatus.IDLE
+
+        db = await get_direct_postgres_session()
+        async with db:
+            result = await db.execute(select(Vehicle).where(Vehicle.id == UUID(vehicle_id)))
+            vehicle = result.scalar_one_or_none()
+            if not vehicle:
+                return
+
+            vehicle.current_lat = frame.gps.lat
+            vehicle.current_lng = frame.gps.lng
+            vehicle.current_alt = frame.gps.alt
+            vehicle.battery = frame.battery.remaining
+            vehicle.gps_fix = frame.gps.fix_type
+            vehicle.satellites = frame.gps.satellites_visible
+            vehicle.mode = frame.system.mode
+            vehicle.armed = frame.system.armed
+            vehicle.status = status
+            vehicle.last_seen = datetime.now(timezone.utc)
+            await db.commit()
+    except Exception as e:
+        logger.debug(f"Vehicle registry sync skipped for {vehicle_id}: {e}")
+
+
+async def _sync_vehicle_online_state(vehicle_id: str) -> None:
+    """Mark a vehicle online in Postgres when heartbeat confirms connectivity."""
+    try:
+        db = await get_direct_postgres_session()
+        async with db:
+            result = await db.execute(select(Vehicle).where(Vehicle.id == UUID(vehicle_id)))
+            vehicle = result.scalar_one_or_none()
+            if not vehicle:
+                return
+
+            if vehicle.status == VehicleStatus.OFFLINE:
+                vehicle.status = VehicleStatus.IDLE
+            vehicle.last_seen = datetime.now(timezone.utc)
+            await db.commit()
+    except Exception as e:
+        logger.debug(f"Vehicle online-state sync skipped for {vehicle_id}: {e}")
 
 
 async def get_telemetry_history(

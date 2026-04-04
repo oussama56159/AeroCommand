@@ -1,5 +1,6 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useMemo } from 'react';
 import { useTelemetryStore } from '@/stores/telemetryStore';
+import { useFleetStore } from '@/stores/fleetStore';
 import { useAuthStore } from '@/stores/authStore';
 import wsManager from './WebSocketManager';
 
@@ -46,27 +47,35 @@ export function useTelemetryStream(vehicleId) {
 export function useFleetTelemetryStream(vehicleIds) {
   const updateTelemetry = useTelemetryStore((s) => s.updateVehicleTelemetry);
   const setConnectionStatus = useTelemetryStore((s) => s.setConnectionStatus);
+  const syncVehicleTelemetry = useFleetStore((s) => s.syncVehicleTelemetry);
   const orgId = useAuthStore((s) => s.user?.organization_id);
+  const vehicleIdsRef = useRef(vehicleIds || []);
+  const vehicleKey = useMemo(() => (vehicleIds || []).slice().sort().join('|'), [vehicleIds]);
+
+  useEffect(() => {
+    vehicleIdsRef.current = vehicleIds || [];
+  }, [vehicleIds]);
 
   useEffect(() => {
     const channel = orgId ? `org:${orgId}` : null;
     if (!channel) return;
     wsManager.connect(channel, {
       onOpen: () => {
-        (vehicleIds || []).forEach((id) => setConnectionStatus(id, 'connected'));
+        vehicleIdsRef.current.forEach((id) => setConnectionStatus(id, 'connected'));
       },
       onMessage: (data) => {
         if (data?.type === 'telemetry' && data?.vehicle_id && data?.data) {
           updateTelemetry(data.vehicle_id, data.data);
+          syncVehicleTelemetry(data.vehicle_id, data.data);
         }
       },
       onClose: () => {
-        (vehicleIds || []).forEach((id) => setConnectionStatus(id, 'disconnected'));
+        vehicleIdsRef.current.forEach((id) => setConnectionStatus(id, 'disconnected'));
       },
     });
 
     return () => wsManager.disconnect(channel);
-  }, [orgId, vehicleIds, updateTelemetry, setConnectionStatus]);
+  }, [orgId, vehicleKey, updateTelemetry, setConnectionStatus, syncVehicleTelemetry]);
 }
 
 export function useAlertStream() {

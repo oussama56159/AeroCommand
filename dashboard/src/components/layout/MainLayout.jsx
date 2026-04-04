@@ -1,5 +1,5 @@
 import { Outlet } from 'react-router-dom';
-import { useEffect, useMemo } from 'react';
+import { Suspense, useEffect, useMemo } from 'react';
 import { clsx } from 'clsx';
 import Sidebar from './Sidebar';
 import Header from './Header';
@@ -7,6 +7,7 @@ import ToastContainer from '@/components/ui/Toast';
 import CommandConfirmModal from '@/components/shared/CommandConfirmModal';
 import ActionConfirmModal from '@/components/shared/ActionConfirmModal';
 import ActionDetailsModal from '@/components/shared/ActionDetailsModal';
+import { PageLoader } from '@/components/ui/Spinner';
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useFleetStore } from '@/stores/fleetStore';
@@ -49,7 +50,9 @@ export default function MainLayout() {
       <div className={clsx('transition-all duration-300', collapsed ? 'lg:ml-[72px]' : 'lg:ml-[260px]')}>
         <Header />
         <main className="p-6">
-          <Outlet />
+          <Suspense fallback={<PageLoader />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
       <ToastContainer />

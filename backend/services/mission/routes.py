@@ -12,6 +12,7 @@ from backend.shared.schemas.mission import (
     MissionAssignRequest,
     MissionAssignmentResponse,
     MissionCreate,
+    MissionDownloadRequest,
     MissionResponse,
     MissionStatus,
     MissionStatusUpdateRequest,
@@ -27,6 +28,7 @@ from .service import (
     compile_mission_graph,
     create_mission,
     delete_mission,
+    download_mission_from_vehicle,
     get_mission,
     get_mission_graph,
     list_missions,
@@ -155,6 +157,21 @@ async def api_upload_mission(
 ):
     """Upload a mission to a vehicle via MQTT → edge agent → Pixhawk."""
     return await upload_mission_to_vehicle(db, org_id, data)
+
+
+@router.post(
+    "/download",
+    response_model=MissionResponse,
+    dependencies=[Depends(RequireRole(Role.PILOT))],
+)
+async def api_download_mission(
+    data: MissionDownloadRequest,
+    org_id: OrgId,
+    user: CurrentUser,
+    db: AsyncSession = Depends(get_postgres_session),
+):
+    """Download current mission from a vehicle via MQTT → edge agent → Pixhawk."""
+    return await download_mission_from_vehicle(db, org_id, data, user=user)
 
 
 @router.get("/{mission_id}/graph", response_model=MissionGraph)

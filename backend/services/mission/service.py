@@ -1,6 +1,7 @@
 """Mission business logic – CRUD, upload to vehicles via MQTT."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 from datetime import datetime, timezone
@@ -20,7 +21,10 @@ from backend.shared.schemas.mission import (
     MissionStatus,
     MissionStatusUpdateRequest,
     MissionUpdate,
+    MissionDownloadRequest,
     MissionUploadRequest,
+    MissionDownloadRequestEvent,
+    MissionDownloadResponseEvent,
     MissionUploadEvent,
     WaypointResponse,
 )
@@ -45,6 +49,29 @@ logger = logging.getLogger(__name__)
 
 
 _MISSION_GRAPH_SETTINGS_KEY = "mission_graph"
+
+
+_mission_download_listener_started = False
+_mission_download_pending: dict[str, asyncio.Future[dict]] = {}
+
+
+async def _ensure_mission_download_listener() -> None:
+    global _mission_download_listener_started
+    if _mission_download_listener_started:
+        return
+
+    mqtt = await get_mqtt()
+
+    async def _handle(topic: str, payload: dict) -> None:
+        request_id = payload.get("request_id")
+        if not request_id:
+            return
+        fut = _mission_download_pending.get(str(request_id))
+        if fut is not None and not fut.done():
+            fut.set_result(payload)
+
+    await mqtt.subscribe("aerocommand/+/mission/+/download/response", _handle)
+    _mission_download_listener_started = True
 
 
 async def create_mission(
@@ -376,6 +403,58 @@ async def upload_mission_to_vehicle(db: AsyncSession, org_id: UUID, data: Missio
     await db.flush()
 
     return {"status": "uploading", "mission_id": str(data.mission_id), "vehicle_id": str(data.vehicle_id)}
+
+
+async def download_mission_from_vehicle(
+    db: AsyncSession,
+    org_id: UUID,
+    data: MissionDownloadRequest,
+    *,
+    user: dict | None = None,
+    timeout_s: float = 30.0,
+) -> MissionResponse:
+    """Request current mission from a vehicle via MQTT → edge agent → MAVLink."""
+    await _assert_vehicle_access(db, org_id, data.vehicle_id, user)
+    await _ensure_mission_download_listener()
+
+    request_id = str(uuid4())
+    now = datetime.now(timezone.utc)
+    topic = MQTTTopics.mission_download_request(str(org_id), str(data.vehicle_id))
+    mqtt = await get_mqtt()
+
+    loop = asyncio.get_running_loop()
+    fut: asyncio.Future[dict] = loop.create_future()
+    _mission_download_pending[request_id] = fut
+    try:
+        req_event = MissionDownloadRequestEvent(
+            request_id=request_id,
+            org_id=str(org_id),
+            vehicle_id=str(data.vehicle_id),
+            timestamp=now,
+        )
+        await mqtt.publish(topic, req_event.model_dump(mode="json"))
+
+        try:
+            payload = await asyncio.wait_for(fut, timeout=timeout_s)
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Timed out waiting for mission download response")
+
+        resp = MissionDownloadResponseEvent.model_validate(payload)
+        if not resp.ok:
+            raise HTTPException(status_code=502, detail=resp.message or "Mission download failed")
+        if not resp.waypoints:
+            raise HTTPException(status_code=502, detail="Vehicle returned empty mission")
+
+        mission_name = data.name or f"Downloaded mission {now.strftime('%Y-%m-%d %H:%M:%S UTC')}"
+        created = await create_mission(
+            db,
+            org_id,
+            MissionCreate(name=mission_name, vehicle_id=data.vehicle_id, waypoints=resp.waypoints),
+            user=user,
+        )
+        return created
+    finally:
+        _mission_download_pending.pop(request_id, None)
 
 
 async def get_mission_graph(

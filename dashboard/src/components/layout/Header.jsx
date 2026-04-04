@@ -5,6 +5,7 @@ import { useTelemetryStore } from '@/stores/telemetryStore';
 import { useState, useRef, useEffect } from 'react';
 import Badge from '@/components/ui/Badge';
 import { getStoredTheme, isDarkTheme, setTheme } from '@/lib/theme/theme';
+import { systemAPI } from '@/lib/api/endpoints';
 
 const MOCK_MODE_KEY = 'aero_mock_mode';
 
@@ -26,6 +27,7 @@ export default function Header() {
     if (stored !== null) return stored === 'true';
     return import.meta.env.VITE_MOCK_MODE === 'true';
   });
+  const [backendHealth, setBackendHealth] = useState({ state: 'checking', checks: {} });
   const alertRef = useRef(null);
   const profileRef = useRef(null);
 
@@ -36,6 +38,34 @@ export default function Header() {
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    let intervalId = null;
+
+    const pollHealth = async () => {
+      try {
+        const { data } = await systemAPI.health();
+        if (!active) return;
+        setBackendHealth({
+          state: data?.status === 'ready' ? 'ready' : data?.status === 'degraded' ? 'degraded' : 'live',
+          checks: data?.checks || {},
+          timestamp: data?.timestamp,
+        });
+      } catch (error) {
+        if (!active) return;
+        setBackendHealth({ state: 'offline', error: error?.message || 'Backend unreachable' });
+      }
+    };
+
+    pollHealth();
+    intervalId = window.setInterval(pollHealth, 15000);
+
+    return () => {
+      active = false;
+      if (intervalId) window.clearInterval(intervalId);
+    };
   }, []);
 
   const toggleMockMode = () => {
@@ -74,8 +104,14 @@ export default function Header() {
       <div className="flex items-center gap-3">
         {/* Connection Status */}
         <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800">
-          <Wifi className="w-3.5 h-3.5 text-emerald-400" />
-          <span className="text-xs text-slate-400">Live</span>
+          {backendHealth.state === 'offline' ? (
+            <WifiOff className="w-3.5 h-3.5 text-red-400" />
+          ) : (
+            <Wifi className={`w-3.5 h-3.5 ${backendHealth.state === 'degraded' ? 'text-amber-400' : 'text-emerald-400'}`} />
+          )}
+          <span className={`text-xs ${backendHealth.state === 'offline' ? 'text-red-300' : backendHealth.state === 'degraded' ? 'text-amber-300' : 'text-slate-400'}`}>
+            {backendHealth.state === 'offline' ? 'Offline' : backendHealth.state === 'degraded' ? 'Degraded' : backendHealth.state === 'checking' ? 'Checking' : 'Ready'}
+          </span>
         </div>
 
         {/* Theme Toggle */}
@@ -135,7 +171,7 @@ export default function Header() {
                 onClick={toggleMockMode}
                 className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-slate-300 hover:bg-slate-700/50 transition-colors"
               >
-                <span>Mock Mode</span>
+                <span>Demo Mode</span>
                 <span className={`text-xs ${mockEnabled ? 'text-emerald-400' : 'text-slate-500'}`}>
                   {mockEnabled ? 'ON' : 'OFF'}
                 </span>

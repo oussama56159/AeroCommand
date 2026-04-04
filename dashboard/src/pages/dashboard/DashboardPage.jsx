@@ -1,6 +1,6 @@
 import {
-  Radar, Plane, Battery, Gauge, Navigation, AlertTriangle,
-  Clock, CheckCircle2,
+  Radar, Plane, Battery, Navigation, AlertTriangle,
+  Wifi,
 } from 'lucide-react';
 import Card, { CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
@@ -8,7 +8,8 @@ import StatusIndicator from '@/components/ui/StatusIndicator';
 import { useFleetStore } from '@/stores/fleetStore';
 import { useTelemetryStore } from '@/stores/telemetryStore';
 import { useMissionStore } from '@/stores/missionStore';
-import { mockAnalytics } from '@/lib/mock/mockData';
+import { useMemo } from 'react';
+import { buildLiveOpsMetrics } from '@/lib/analytics/liveMetrics';
 
 function StatCard({ icon: Icon, label, value, sub, color = 'blue' }) {
   const colors = { blue: 'from-blue-500 to-blue-600', green: 'from-emerald-500 to-emerald-600', red: 'from-red-500 to-red-600', amber: 'from-amber-500 to-amber-600', purple: 'from-purple-500 to-purple-600', cyan: 'from-cyan-500 to-cyan-600' };
@@ -52,11 +53,13 @@ export default function DashboardPage() {
   const vehicles = useFleetStore((s) => s.vehicles);
   const alerts = useTelemetryStore((s) => s.alerts);
   const missions = useMissionStore((s) => s.missions);
+  const telemetryByVehicle = useTelemetryStore((s) => s.vehicleTelemetry);
+  const connectionStatus = useTelemetryStore((s) => s.connectionStatus);
 
-  const inFlight = vehicles.filter((v) => v.status === 'in_flight').length;
-  const online = vehicles.filter((v) => v.status !== 'offline').length;
-  const critAlerts = alerts.filter((a) => a.severity === 'critical' && !a.acknowledged).length;
-  const activeMissions = missions.filter((m) => m.status === 'in_progress').length;
+  const metrics = useMemo(
+    () => buildLiveOpsMetrics({ vehicles, missions, alerts, telemetryByVehicle, connectionStatus }),
+    [vehicles, missions, alerts, telemetryByVehicle, connectionStatus]
+  );
 
   return (
     <div className="space-y-6">
@@ -67,19 +70,19 @@ export default function DashboardPage() {
 
       {/* KPI Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        <StatCard icon={Radar} label="Total Fleet" value={vehicles.length} sub={`${online} online`} color="blue" />
-        <StatCard icon={Plane} label="In Flight" value={inFlight} sub="Active now" color="cyan" />
-        <StatCard icon={Navigation} label="Active Missions" value={activeMissions} sub={`${missions.length} total`} color="purple" />
-        <StatCard icon={AlertTriangle} label="Critical Alerts" value={critAlerts} sub={`${alerts.length} total`} color={critAlerts > 0 ? 'red' : 'green'} />
-        <StatCard icon={Clock} label="Flight Hours" value={mockAnalytics.totalFlightHours.toLocaleString()} sub="All time" color="amber" />
-        <StatCard icon={CheckCircle2} label="Success Rate" value={`${mockAnalytics.successRate}%`} sub={`${mockAnalytics.totalMissions} missions`} color="green" />
+        <StatCard icon={Radar} label="Total Fleet" value={metrics.totalFleet} sub={`${metrics.onlineVehicles} online`} color="blue" />
+        <StatCard icon={Wifi} label="Connected" value={metrics.connectedVehicles} sub="Live link" color="cyan" />
+        <StatCard icon={Plane} label="In Flight" value={metrics.inFlightVehicles} sub="Active now" color="purple" />
+        <StatCard icon={Navigation} label="Active Missions" value={metrics.activeMissions} sub={`${metrics.totalMissions} total`} color="purple" />
+        <StatCard icon={AlertTriangle} label="Critical Alerts" value={metrics.criticalAlerts} sub={`${alerts.length} total`} color={metrics.criticalAlerts > 0 ? 'red' : 'green'} />
+        <StatCard icon={Battery} label="Avg Battery" value={`${Math.round(metrics.averageBattery)}%`} sub={`${metrics.telemetrySampleCount} samples`} color="amber" />
       </div>
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Active Vehicles */}
         <Card className="lg:col-span-2">
-          <CardHeader action={<Badge color="blue">{online} online</Badge>}>
+          <CardHeader action={<Badge color="blue">{metrics.connectedVehicles} connected</Badge>}>
             <CardTitle subtitle="Real-time status of fleet vehicles">Active Vehicles</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1 max-h-[400px] overflow-y-auto">
@@ -94,7 +97,7 @@ export default function DashboardPage() {
 
         {/* Recent Alerts */}
         <Card>
-          <CardHeader action={<Badge color={critAlerts > 0 ? 'red' : 'green'}>{critAlerts} critical</Badge>}>
+          <CardHeader action={<Badge color={metrics.criticalAlerts > 0 ? 'red' : 'green'}>{metrics.criticalAlerts} critical</Badge>}>
             <CardTitle subtitle="Latest system alerts">Alerts</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 max-h-[400px] overflow-y-auto">

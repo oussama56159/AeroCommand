@@ -1,3 +1,4 @@
+import axios from 'axios';
 import apiClient from './client';
 
 // ─── Auth Endpoints ───
@@ -49,6 +50,7 @@ export const missionAPI = {
   assignments: (id) => apiClient.get(`/missions/${id}`),
   status: (data) => apiClient.post('/missions/status', data),
   upload: (vehicleId, missionId) => apiClient.post('/missions/upload', { vehicle_id: vehicleId, mission_id: missionId }),
+  download: (vehicleId, name) => apiClient.post('/missions/download', { vehicle_id: vehicleId, ...(name ? { name } : {}) }),
   start: (vehicleId, missionId) => apiClient.post('/commands', { vehicle_id: vehicleId, command: 'mission_start', params: { mission_id: missionId } }),
   pause: (vehicleId) => apiClient.post('/commands', { vehicle_id: vehicleId, command: 'mission_pause' }),
   resume: (vehicleId) => apiClient.post('/commands', { vehicle_id: vehicleId, command: 'mission_resume' }),
@@ -103,7 +105,7 @@ export const fleetUserAPI = {
 
 // ─── System Endpoints ───
 export const systemAPI = {
-  health: () => apiClient.get('/system/health'),
+  health: () => axios.get('/health/ready'),
   config: () => apiClient.get('/system/config'),
   updateConfig: (data) => apiClient.put('/system/config', data),
   getLogs: (params) => apiClient.get('/system/logs', { params }),

@@ -2,6 +2,7 @@ import { clsx } from 'clsx';
 
 const statusConfig = {
   online: { color: 'bg-emerald-500', pulse: true, label: 'Online' },
+  idle: { color: 'bg-emerald-500', pulse: false, label: 'Idle' },
   offline: { color: 'bg-slate-500', pulse: false, label: 'Offline' },
   armed: { color: 'bg-red-500', pulse: true, label: 'Armed' },
   disarmed: { color: 'bg-emerald-500', pulse: false, label: 'Disarmed' },
